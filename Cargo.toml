@@ -1,0 +1,26 @@
+[package]
+name = "starlark-pyo3"
+version = "0.1.0"
+authors = ["Andreas Kloeckner <inform@tiker.net>"]
+license = "MIT"
+
+description = "Python bindings for starlark-rust"
+homepage = "https://github.com/inducer/starlark-pyo3"
+repository = "https://github.com/inducer/starlark-pyo3"
+readme = "README.md"
+
+[lib]
+crate-type = ["cdylib"]
+name = "starlark"
+
+[package.metadata.maturin]
+classifier = [
+  "Programming Language :: Rust",
+]
+
+requires-python = ">=3.6"
+
+[dependencies]
+starlark = "^0.6.0"
+anyhow = "1.0.26"
+pyo3 = { version = "0.15.1", features = ["extension-module"] }
