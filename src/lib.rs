@@ -1,26 +1,23 @@
-extern crate starlark;
-extern crate pyo3;
 extern crate anyhow;
+extern crate pyo3;
+extern crate starlark;
 
-use pyo3::prelude::*;
-use pyo3::exceptions::PyException;
 use pyo3::create_exception;
+use pyo3::exceptions::PyException;
+use pyo3::prelude::*;
 
+use starlark::environment::{Globals, Module};
 use starlark::eval::Evaluator;
-use starlark::environment::{Module, Globals};
-use starlark::values::Value;
 use starlark::syntax::{AstModule, Dialect};
-
+use starlark::values::Value;
 
 create_exception!(starlark, StarlarkError, PyException);
 
 // TODO: expose classes
 // TODO: access to the linter
 
-
 fn run_str_inner(content: &str, filename: &str) -> Result<String, anyhow::Error> {
-    let ast: AstModule = AstModule::parse(
-        filename, content.to_string(), &Dialect::Standard)?;
+    let ast: AstModule = AstModule::parse(filename, content.to_string(), &Dialect::Standard)?;
 
     let globals: Globals = Globals::standard();
 
@@ -34,7 +31,6 @@ fn run_str_inner(content: &str, filename: &str) -> Result<String, anyhow::Error>
     Ok(json_res)
 }
 
-
 #[pyfunction]
 fn run_str(content: &str, filename: &str) -> PyResult<PyObject> {
     let res = run_str_inner(content, filename);
@@ -42,11 +38,10 @@ fn run_str(content: &str, filename: &str) -> PyResult<PyObject> {
         let json = py.import("json")?;
         match res {
             Ok(s) => Ok(json.getattr("loads")?.call((s,), None)?.extract()?),
-            Err(e) => Err(StarlarkError::new_err(e.to_string()))
+            Err(e) => Err(StarlarkError::new_err(e.to_string())),
         }
     })
 }
-
 
 #[pymodule]
 fn starlark(_py: Python, m: &PyModule) -> PyResult<()> {
