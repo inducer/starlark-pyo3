@@ -6,7 +6,6 @@ use pyo3::prelude::*;
 use pyo3::exceptions::PyException;
 use pyo3::create_exception;
 
-use starlark::errors::Diagnostic;
 use starlark::eval::Evaluator;
 use starlark::environment::{Module, Globals};
 use starlark::values::Value;
@@ -17,20 +16,6 @@ create_exception!(starlark, StarlarkError, PyException);
 
 // TODO: expose classes
 // TODO: access to the linter
-
-struct StarlarkErrorWrapper(Diagnostic);
-
-impl std::convert::From<Diagnostic> for StarlarkErrorWrapper {
-    fn from(err: Diagnostic) -> StarlarkErrorWrapper {
-        StarlarkErrorWrapper(err)
-    }
-}
-
-impl std::convert::From<StarlarkErrorWrapper> for PyErr {
-    fn from(err: StarlarkErrorWrapper) -> PyErr {
-        StarlarkError::new_err(format!("{}", err.0))
-    }
-}
 
 
 fn run_str_inner(content: &str, filename: &str) -> Result<String, anyhow::Error> {
