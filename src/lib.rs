@@ -8,7 +8,7 @@ use pyo3::prelude::*;
 
 use starlark::environment::{Globals, Module};
 use starlark::eval::Evaluator;
-use starlark::syntax::{AstModule, Dialect};
+use starlark::syntax::Dialect;
 use starlark::values::Value;
 
 create_exception!(starlark, StarlarkError, PyException);
@@ -17,7 +17,7 @@ create_exception!(starlark, StarlarkError, PyException);
 // TODO: access to the linter
 
 #[pyclass]
-struct AstModuleWrapper(AstModule);
+struct AstModule(starlark::syntax::AstModule);
 
 fn convert_err<T>(err: Result<T, anyhow::Error>) -> Result<T, PyErr> {
     match err {
@@ -27,8 +27,8 @@ fn convert_err<T>(err: Result<T, anyhow::Error>) -> Result<T, PyErr> {
 }
 
 #[pyfunction]
-fn parse(content: &str, filename: &str) -> PyResult<AstModuleWrapper> {
-    Ok(AstModuleWrapper(convert_err(AstModule::parse(
+fn parse(content: &str, filename: &str) -> PyResult<AstModule> {
+    Ok(AstModule(convert_err(starlark::syntax::AstModule::parse(
         filename,
         content.to_string(),
         &Dialect::Standard,
@@ -36,7 +36,7 @@ fn parse(content: &str, filename: &str) -> PyResult<AstModuleWrapper> {
 }
 
 fn run_str_inner(content: &str, filename: &str) -> PyResult<String> {
-    let ast: AstModule = convert_err(AstModule::parse(
+    let ast: starlark::syntax::AstModule = convert_err(starlark::syntax::AstModule::parse(
         filename,
         content.to_string(),
         &Dialect::Standard,
@@ -68,7 +68,7 @@ fn run_str(content: &str, filename: &str) -> PyResult<PyObject> {
 
 #[pymodule]
 fn starlark(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_class::<AstModuleWrapper>()?;
+    m.add_class::<AstModule>()?;
     m.add_wrapped(wrap_pyfunction!(parse))?;
     m.add_wrapped(wrap_pyfunction!(run_str))?;
     m.add("StarlarkError", _py.get_type::<StarlarkError>())?;
