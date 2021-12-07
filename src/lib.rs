@@ -16,8 +16,31 @@ create_exception!(starlark, StarlarkError, PyException);
 // TODO: expose classes
 // TODO: access to the linter
 
-fn run_str_inner(content: &str, filename: &str) -> Result<String, anyhow::Error> {
-    let ast: AstModule = AstModule::parse(filename, content.to_string(), &Dialect::Standard)?;
+#[pyclass]
+struct AstModuleWrapper(AstModule);
+
+fn convert_err<T>(err: Result<T, anyhow::Error>) -> Result<T, PyErr> {
+    match err {
+        Ok(t) => Ok(t),
+        Err(e) => Err(StarlarkError::new_err(e.to_string())),
+    }
+}
+
+#[pyfunction]
+fn parse(content: &str, filename: &str) -> PyResult<AstModuleWrapper> {
+    Ok(AstModuleWrapper(convert_err(AstModule::parse(
+        filename,
+        content.to_string(),
+        &Dialect::Standard,
+    ))?))
+}
+
+fn run_str_inner(content: &str, filename: &str) -> PyResult<String> {
+    let ast: AstModule = convert_err(AstModule::parse(
+        filename,
+        content.to_string(),
+        &Dialect::Standard,
+    ))?;
 
     let globals: Globals = Globals::standard();
 
@@ -25,9 +48,9 @@ fn run_str_inner(content: &str, filename: &str) -> Result<String, anyhow::Error>
 
     let mut eval: Evaluator = Evaluator::new(&module);
 
-    let res: Value = eval.eval_module(ast, &globals)?;
+    let res: Value = convert_err(eval.eval_module(ast, &globals))?;
 
-    let json_res = res.to_json()?;
+    let json_res = convert_err(res.to_json())?;
     Ok(json_res)
 }
 
@@ -38,15 +61,17 @@ fn run_str(content: &str, filename: &str) -> PyResult<PyObject> {
         let json = py.import("json")?;
         match res {
             Ok(s) => Ok(json.getattr("loads")?.call((s,), None)?.extract()?),
-            Err(e) => Err(StarlarkError::new_err(e.to_string())),
+            Err(e) => Err(e),
         }
     })
 }
 
 #[pymodule]
 fn starlark(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_class::<AstModuleWrapper>()?;
+    m.add_wrapped(wrap_pyfunction!(parse))?;
     m.add_wrapped(wrap_pyfunction!(run_str))?;
-    m.add("CustomError", _py.get_type::<StarlarkError>())?;
+    m.add("StarlarkError", _py.get_type::<StarlarkError>())?;
 
     Ok(())
 }
