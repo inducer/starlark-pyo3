@@ -261,6 +261,13 @@ impl Module {
         Ok(Module(starlark::environment::Module::new()))
     }
 
+    fn __getitem__(&self, name: &str) -> PyResult<PyObject> {
+        Python::with_gil(|py| match self.0.get(name) {
+            Some(val) => Ok(value_to_pyobject(val)?),
+            None => Ok(py.None()),
+        })
+    }
+
     fn __setitem__(&self, name: &str, obj: PyObject) -> PyResult<()> {
         self.0.set(name, pyobject_to_value(obj, self.0.heap())?);
         Ok(())

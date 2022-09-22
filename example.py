@@ -12,7 +12,8 @@ def f(x):
         z += i*x
     return x*x - 5 + z
 
-f(a - z + zz)
+res = f(a - z + zz)
+res
 """
 
 
@@ -39,3 +40,4 @@ for lnt in ast.lint():
 val = sl.eval(mod, ast, glb, sl.FileLoader(load))
 print(val)
 
+print(mod["res"])
