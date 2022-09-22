@@ -163,7 +163,8 @@ fn eval(module: &mut Module, ast: &PyCell<AstModule>, globals: &Globals) -> PyRe
 
     let mut evaluator = starlark::eval::Evaluator::new(&module.0);
 
-    // stupid: eval consumes the ast, but starlark says so
+    // Stupid: eval_module consumes the AST.
+    // Python would like it to live on,  but starlark-rust says no.
     value_to_pyobject(convert_err(
         evaluator.eval_module(ast.replace(AstModule(empty_ast)).0, &globals.0),
     )?)
