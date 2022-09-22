@@ -1,5 +1,4 @@
 import starlark as sl
-import timeit
 
 A_STAR ="""
 load("zz.star", "zz")
@@ -33,8 +32,8 @@ def load(name):
         raise FileNotFoundError(name)
 
 for lnt in ast.lint():
-    #print(lnt)
-    #print(lnt.serious)
+    print(lnt)
+    print(lnt.serious)
     pass
 
 val = sl.eval(mod, ast, glb, sl.FileLoader(load))
