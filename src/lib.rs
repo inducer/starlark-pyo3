@@ -29,11 +29,13 @@ use crate::pyo3::create_exception;
 use crate::pyo3::exceptions::PyException;
 use crate::pyo3::prelude::*;
 
-use crate::starlark::collections::SmallMap;
-use crate::starlark::values::Heap;
-use crate::starlark::values::Value;
 use gazebo::prelude::*;
+
+use crate::starlark::collections::SmallMap;
+use starlark::eval::Arguments;
 use starlark::values::dict::Dict;
+use starlark::values::{Heap, NoSerialize, ProvidesStaticType, StarlarkValue, Value};
+use starlark::{starlark_simple_value, starlark_type};
 use thiserror::Error;
 
 create_exception!(starlark, StarlarkError, PyException);
@@ -117,6 +119,13 @@ fn convert_serde_err<T>(err: Result<T, serde_json::Error>) -> Result<T, PyErr> {
     match err {
         Ok(t) => Ok(t),
         Err(e) => Err(StarlarkError::new_err(format!("{}", e))),
+    }
+}
+
+fn convert_to_anyhow<T>(err: Result<T, PyErr>) -> Result<T, anyhow::Error> {
+    match err {
+        Ok(t) => Ok(t),
+        Err(e) => Err(anyhow::Error::new(e)),
     }
 }
 
@@ -332,6 +341,37 @@ impl Globals {
 
 // }}}
 
+// {{{ PythonCallableValue
+
+#[derive(Debug, ProvidesStaticType, NoSerialize)]
+struct PythonCallableValue {
+    callable: PyObject,
+}
+starlark_simple_value!(PythonCallableValue);
+
+impl Display for PythonCallableValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<python callable>")
+    }
+}
+
+impl<'v> StarlarkValue<'v> for PythonCallableValue {
+    starlark_type!("python_callable_value");
+
+    fn invoke(
+        &self,
+        _me: Value<'v>,
+        _args: &Arguments<'v, '_>,
+        eval: &mut starlark::eval::Evaluator<'v, '_>,
+    ) -> anyhow::Result<Value<'v>> {
+        Python::with_gil(|py| -> anyhow::Result<Value<'v>> {
+            convert_to_anyhow(pyobject_to_value(self.callable.call0(py)?, eval.heap()))
+        })
+    }
+}
+
+// }}}
+
 // {{{ Module
 
 #[pyclass]
@@ -354,6 +394,14 @@ impl Module {
     fn __setitem__(&self, name: &str, obj: PyObject) -> PyResult<()> {
         self.0.set(name, pyobject_to_value(obj, self.0.heap())?);
         Ok(())
+    }
+
+    fn add_callable(&self, name: &str, callable: PyObject) {
+        let b = self
+            .0
+            .heap()
+            .alloc(PythonCallableValue { callable: callable });
+        self.0.set(name, b);
     }
 
     fn freeze(mod_cell: &PyCell<Module>) -> PyResult<FrozenModule> {
