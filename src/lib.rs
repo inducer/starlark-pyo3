@@ -236,9 +236,14 @@ struct Globals(starlark::environment::Globals);
 
 #[pymethods]
 impl Globals {
-    #[new]
-    fn py_new() -> PyResult<Globals> {
+    #[staticmethod]
+    fn standard() -> PyResult<Globals> {
         Ok(Globals(starlark::environment::Globals::standard()))
+    }
+
+    #[staticmethod]
+    fn extended() -> PyResult<Globals> {
+        Ok(Globals(starlark::environment::Globals::extended()))
     }
 }
 

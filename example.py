@@ -16,7 +16,7 @@ f(a - z + zz)
 """
 
 
-glb = sl.Globals()
+glb = sl.Globals.standard()
 mod = sl.Module()
 mod["a"] = 5
 
