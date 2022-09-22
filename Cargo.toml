@@ -24,8 +24,14 @@ requires-python = ">=3.6"
 starlark = { git = 'https://github.com/facebookexperimental/starlark-rust.git' }
 anyhow = "^1.0.65"
 pyo3 = { version = "0.17.1", features = ["extension-module"] }
+
+# needed to resolve contradictory constraints in dependencies
 syn = "^1.0.96"
-ouroboros = "0.15.5"
+
+serde_json = "1.0"
+num-bigint = "0.4.3"
+thiserror = "^1.0.35"
+gazebo = "^0.8.0"
 
 [patch.crates-io]
 starlark = { git = 'https://github.com/facebookexperimental/starlark-rust/' }

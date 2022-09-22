@@ -1,15 +1,84 @@
+/*
+ * Copyright 2022 University of Illinois Board of Trustees
+ * Copyright 2018 The Starlark in Rust Authors.
+ * Copyright (c) Facebook, Inc. and its affiliates.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 extern crate anyhow;
+extern crate gazebo;
 extern crate pyo3;
+extern crate serde_json;
 extern crate starlark;
+extern crate thiserror;
 
 use crate::pyo3::create_exception;
 use crate::pyo3::exceptions::PyException;
 use crate::pyo3::prelude::*;
 
+use crate::starlark::collections::SmallMap;
 use crate::starlark::syntax::Dialect;
+use crate::starlark::values::Heap;
 use crate::starlark::values::Value;
+use gazebo::prelude::*;
+use starlark::values::dict::Dict;
+use thiserror::Error;
 
 create_exception!(starlark, StarlarkError, PyException);
+
+// {{{ copied from starlark stdlib
+
+// https://github.com/facebookexperimental/starlark-rust/blob/6b2954ef1aba09b88fcbac346885fc4128eb22e0/starlark/src/stdlib/json.rs
+
+#[derive(Debug, Error)]
+enum JsonError {
+    #[error("Number can't be represented, perhaps a float value that is too precise, got `{0}")]
+    UnrepresentableNumber(String),
+}
+
+fn serde_to_starlark<'v>(x: serde_json::Value, heap: &'v Heap) -> anyhow::Result<Value<'v>> {
+    match x {
+        serde_json::Value::Null => Ok(Value::new_none()),
+        serde_json::Value::Bool(x) => Ok(Value::new_bool(x)),
+        serde_json::Value::Number(x) => {
+            if let Some(x) = x.as_u64() {
+                Ok(heap.alloc(x))
+            } else if let Some(x) = x.as_f64() {
+                Ok(heap.alloc(x))
+            //} else if let Ok(x) = BigInt::from_str(&x.to_string()) {
+            // Ok(StarlarkBigInt::alloc_bigint(x, heap))
+            } else {
+                Err(JsonError::UnrepresentableNumber(x.to_string()).into())
+            }
+        }
+        serde_json::Value::String(x) => Ok(heap.alloc(x)),
+        serde_json::Value::Array(x) => {
+            Ok(heap.alloc_list_iter(x.into_try_map(|v| serde_to_starlark(v, heap))?))
+        }
+        serde_json::Value::Object(x) => {
+            let mut mp = SmallMap::with_capacity(x.len());
+            for (k, v) in x {
+                let k = heap.alloc_str(&k).get_hashed_value();
+                let v = serde_to_starlark(v, heap)?;
+                mp.insert_hashed(k, v);
+            }
+            Ok(heap.alloc(Dict::new(mp)))
+        }
+    }
+}
+
+// }}}
 
 fn convert_err<T>(err: Result<T, anyhow::Error>) -> Result<T, PyErr> {
     match err {
@@ -18,6 +87,12 @@ fn convert_err<T>(err: Result<T, anyhow::Error>) -> Result<T, PyErr> {
     }
 }
 
+fn convert_serde_err<T>(err: Result<T, serde_json::Error>) -> Result<T, PyErr> {
+    match err {
+        Ok(t) => Ok(t),
+        Err(e) => Err(StarlarkError::new_err(format!("{}", e))),
+    }
+}
 // TODO: access to the linter
 
 #[pyclass]
@@ -51,6 +126,17 @@ fn value_to_pyobject(value: Value) -> PyResult<PyObject> {
     })
 }
 
+fn pyobject_to_value<'v>(obj: PyObject, heap: &'v Heap) -> PyResult<Value<'v>> {
+    Python::with_gil(|py| -> PyResult<Value<'v>> {
+        let json = py.import("json")?;
+        let json_str: String = json.getattr("dumps")?.call((obj,), None)?.extract()?;
+        convert_err(serde_to_starlark(
+            convert_serde_err(serde_json::from_str(&json_str))?,
+            heap,
+        ))
+    })
+}
+
 #[pyclass]
 struct Module(starlark::environment::Module);
 
@@ -61,11 +147,10 @@ impl Module {
         Ok(Module(starlark::environment::Module::new()))
     }
 
-    //fn set(&self, name: &str, value: PyObject) -> PyResult<()>
-    //{
-    //    self.set(name, );
-    //    Ok(())
-    //}
+    fn __setitem__(&self, name: &str, obj: PyObject) -> PyResult<()> {
+        self.0.set(name, pyobject_to_value(obj, self.0.heap())?);
+        Ok(())
+    }
 }
 
 #[pyfunction]
@@ -96,3 +181,5 @@ fn starlark_py(_py: Python, m: &PyModule) -> PyResult<()> {
 
     Ok(())
 }
+
+// vim: foldmethod=marker
