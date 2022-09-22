@@ -88,14 +88,14 @@ fn value_to_pyobject(value: Value) -> PyResult<PyObject> {
     let json_val = convert_err(value.to_json())?;
     Python::with_gil(|py| {
         let json = py.import("json")?;
-        json.getattr("loads")?.call((json_val,), None)?.extract()
+        json.getattr("loads")?.call1((json_val,))?.extract()
     })
 }
 
 fn pyobject_to_value<'v>(obj: PyObject, heap: &'v Heap) -> PyResult<Value<'v>> {
     Python::with_gil(|py| -> PyResult<Value<'v>> {
         let json = py.import("json")?;
-        let json_str: String = json.getattr("dumps")?.call((obj,), None)?.extract()?;
+        let json_str: String = json.getattr("dumps")?.call1((obj,))?.extract()?;
         convert_err(serde_to_starlark(
             convert_serde_err(serde_json::from_str(&json_str))?,
             heap,
@@ -198,7 +198,6 @@ impl Lint {
     }
 }
 
-
 // }}}
 
 // {{{ AstModule
@@ -263,8 +262,9 @@ impl Module {
     }
 
     fn freeze(mod_cell: &PyCell<Module>) -> PyResult<FrozenModule> {
-        let module = mod_cell.replace(
-            Module(starlark::environment::Module::new())).0;
+        let module = mod_cell
+            .replace(Module(starlark::environment::Module::new()))
+            .0;
         Ok(FrozenModule(convert_err(module.freeze())?))
     }
 }
@@ -278,23 +278,70 @@ struct FrozenModule(starlark::environment::FrozenModule);
 
 // }}}
 
+// {{{ FileLoader
+
+#[pyclass]
+struct FileLoader {
+    callable: PyObject,
+}
+
+#[pymethods]
+impl FileLoader {
+    #[new]
+    fn py_new(callable: PyObject) -> FileLoader {
+        FileLoader { callable: callable }
+    }
+}
+
+impl starlark::eval::FileLoader for FileLoader {
+    fn load(&self, path: &str) -> anyhow::Result<starlark::environment::FrozenModule> {
+        Python::with_gil(
+            |py| -> anyhow::Result<starlark::environment::FrozenModule> {
+                let fmod: Py<FrozenModule> =
+                    self.callable.call1(py, (path.to_string(),))?.extract(py)?;
+                // FIXME: Can this be done without cloning the module?
+                let fmod_clone = fmod.borrow(py).0.clone();
+                Ok(fmod_clone)
+            },
+        )
+    }
+}
+
+// }}}
+
 // {{{ eval
 
-#[pyfunction]
-fn eval(module: &mut Module, ast: &PyCell<AstModule>, globals: &Globals) -> PyResult<PyObject> {
-    let empty_ast: starlark::syntax::AstModule = convert_err(starlark::syntax::AstModule::parse(
-        "<empty>",
-        "".to_string(),
-        &Dialect::Standard,
-    ))?;
+fn empty_ast() -> AstModule {
+    AstModule(
+        starlark::syntax::AstModule::parse("<empty>", "".to_string(), &Dialect::Standard).unwrap(),
+    )
+}
 
+#[pyfunction]
+fn eval(
+    module: &mut Module,
+    ast: &PyCell<AstModule>,
+    globals: &Globals,
+    file_loader: Option<&PyCell<FileLoader>>,
+) -> PyResult<PyObject> {
     let mut evaluator = starlark::eval::Evaluator::new(&module.0);
 
-    // Stupid: eval_module consumes the AST.
-    // Python would like it to live on,  but starlark-rust says no.
-    value_to_pyobject(convert_err(
-        evaluator.eval_module(ast.replace(AstModule(empty_ast)).0, &globals.0),
-    )?)
+    let tail = |evaluator: &mut starlark::eval::Evaluator| {
+        // Stupid: eval_module consumes the AST.
+        // Python would like it to live on,  but starlark-rust says no.
+        value_to_pyobject(convert_err(
+            evaluator.eval_module(ast.replace(empty_ast()).0, &globals.0),
+        )?)
+    };
+
+    match file_loader {
+        Some(loader_cell) => {
+            let loader_ref = loader_cell.borrow();
+            evaluator.set_loader(&*loader_ref);
+            tail(&mut evaluator)
+        }
+        None => tail(&mut evaluator),
+    }
 }
 
 // }}}
@@ -309,6 +356,7 @@ fn starlark_py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Globals>()?;
     m.add_class::<Module>()?;
     m.add_class::<FrozenModule>()?;
+    m.add_class::<FileLoader>()?;
     m.add_wrapped(wrap_pyfunction!(parse))?;
     m.add_wrapped(wrap_pyfunction!(eval))?;
     m.add("StarlarkError", _py.get_type::<StarlarkError>())?;
