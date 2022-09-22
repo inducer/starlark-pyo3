@@ -25,9 +25,11 @@ struct AstModule(starlark::syntax::AstModule);
 
 #[pyfunction]
 fn parse(filename: &str, content: &str) -> PyResult<AstModule> {
-    Ok(AstModule(convert_err(
-        starlark::syntax::AstModule::parse(filename, content.to_string(), &Dialect::Standard),
-    )?))
+    Ok(AstModule(convert_err(starlark::syntax::AstModule::parse(
+        filename,
+        content.to_string(),
+        &Dialect::Standard,
+    ))?))
 }
 
 #[pyclass]
@@ -41,6 +43,14 @@ impl Globals {
     }
 }
 
+fn value_to_pyobject(value: Value) -> PyResult<PyObject> {
+    let json_val = convert_err(value.to_json())?;
+    Python::with_gil(|py| {
+        let json = py.import("json")?;
+        json.getattr("loads")?.call((json_val,), None)?.extract()
+    })
+}
+
 #[pyclass]
 struct Module(starlark::environment::Module);
 
@@ -50,17 +60,12 @@ impl Module {
     fn py_new() -> PyResult<Module> {
         Ok(Module(starlark::environment::Module::new()))
     }
-}
 
-fn eval_inner(
-    module: &mut starlark::environment::Module,
-    ast: starlark::syntax::AstModule,
-    globals: &starlark::environment::Globals,
-) -> PyResult<String> {
-    let mut evaluator = starlark::eval::Evaluator::new(&module);
-    let res: Value = convert_err(evaluator.eval_module(ast, globals))?;
-    let json_res = convert_err(res.to_json())?;
-    Ok(json_res)
+    //fn set(&self, name: &str, value: PyObject) -> PyResult<()>
+    //{
+    //    self.set(name, );
+    //    Ok(())
+    //}
 }
 
 #[pyfunction]
@@ -71,20 +76,16 @@ fn eval(module: &mut Module, ast: &PyCell<AstModule>, globals: &Globals) -> PyRe
         &Dialect::Standard,
     ))?;
 
-    // stupid: eval consumes the ast, but that's not our fault
-    let res = eval_inner(&mut module.0, ast.replace(AstModule(empty_ast)).0, &globals.0);
+    let mut evaluator = starlark::eval::Evaluator::new(&module.0);
 
-    Python::with_gil(|py| {
-        let json = py.import("json")?;
-        match res {
-            Ok(s) => Ok(json.getattr("loads")?.call((s,), None)?.extract()?),
-            Err(e) => Err(e),
-        }
-    })
+    // stupid: eval consumes the ast, but starlark says so
+    value_to_pyobject(convert_err(
+        evaluator.eval_module(ast.replace(AstModule(empty_ast)).0, &globals.0),
+    )?)
 }
 
 #[pymodule]
-#[pyo3(name="starlark")]
+#[pyo3(name = "starlark")]
 fn starlark_py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<AstModule>()?;
     m.add_class::<Globals>()?;
