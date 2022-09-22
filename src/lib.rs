@@ -5,7 +5,6 @@ extern crate starlark;
 use crate::pyo3::create_exception;
 use crate::pyo3::exceptions::PyException;
 use crate::pyo3::prelude::*;
-use std::cell::Cell;
 
 use crate::starlark::syntax::Dialect;
 use crate::starlark::values::Value;
@@ -19,17 +18,16 @@ fn convert_err<T>(err: Result<T, anyhow::Error>) -> Result<T, PyErr> {
     }
 }
 
-// TODO: expose classes
 // TODO: access to the linter
 
 #[pyclass]
-struct AstModule(Cell<starlark::syntax::AstModule>);
+struct AstModule(starlark::syntax::AstModule);
 
 #[pyfunction]
 fn parse(filename: &str, content: &str) -> PyResult<AstModule> {
-    Ok(AstModule(Cell::new(convert_err(
+    Ok(AstModule(convert_err(
         starlark::syntax::AstModule::parse(filename, content.to_string(), &Dialect::Standard),
-    )?)))
+    )?))
 }
 
 #[pyclass]
@@ -66,7 +64,7 @@ fn eval_inner(
 }
 
 #[pyfunction]
-fn eval(module: &mut Module, ast: &mut AstModule, globals: &Globals) -> PyResult<PyObject> {
+fn eval(module: &mut Module, ast: &PyCell<AstModule>, globals: &Globals) -> PyResult<PyObject> {
     let empty_ast: starlark::syntax::AstModule = convert_err(starlark::syntax::AstModule::parse(
         "<empty>",
         "".to_string(),
@@ -74,7 +72,7 @@ fn eval(module: &mut Module, ast: &mut AstModule, globals: &Globals) -> PyResult
     ))?;
 
     // stupid: eval consumes the ast, but that's not our fault
-    let res = eval_inner(&mut module.0, ast.0.replace(empty_ast), &globals.0);
+    let res = eval_inner(&mut module.0, ast.replace(AstModule(empty_ast)).0, &globals.0);
 
     Python::with_gil(|py| {
         let json = py.import("json")?;
