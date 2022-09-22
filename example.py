@@ -11,6 +11,29 @@ def f(x):
         z += i*x
     return x*x - 5 + z
 
+def dos(depth):
+    if depth:
+        depth -= 1
+        dos(depth)
+        dos(depth)
+        dos(depth)
+        dos(depth)
+        dos(depth)
+        dos(depth)
+        dos(depth)
+        dos(depth)
+        dos(depth)
+
+#dos(30)
+
+def dos2():
+    for i in range(1000):
+        for i in range(1000):
+            for i in range(1000):
+                pass
+
+#dos2()
+
 res = f(a - z + zz)
 
 g_res = g()
