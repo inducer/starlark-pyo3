@@ -21,6 +21,11 @@ classifier = [
 requires-python = ">=3.6"
 
 [dependencies]
-starlark = "^0.6.0"
-anyhow = "1.0.26"
-pyo3 = { version = "0.15.1", features = ["extension-module"] }
+starlark = { git = 'https://github.com/facebookexperimental/starlark-rust.git' }
+anyhow = "^1.0.65"
+pyo3 = { version = "0.17.1", features = ["extension-module"] }
+syn = "^1.0.96"
+ouroboros = "0.15.5"
+
+[patch.crates-io]
+starlark = { git = 'https://github.com/facebookexperimental/starlark-rust/' }
