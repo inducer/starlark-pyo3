@@ -23,6 +23,8 @@ extern crate serde_json;
 extern crate starlark;
 extern crate thiserror;
 
+use std::fmt::{self, Display};
+
 use crate::pyo3::create_exception;
 use crate::pyo3::exceptions::PyException;
 use crate::pyo3::prelude::*;
@@ -36,6 +38,8 @@ use starlark::values::dict::Dict;
 use thiserror::Error;
 
 create_exception!(starlark, StarlarkError, PyException);
+
+// {{{ value conversion
 
 // {{{ copied from starlark stdlib
 
@@ -80,44 +84,6 @@ fn serde_to_starlark<'v>(x: serde_json::Value, heap: &'v Heap) -> anyhow::Result
 
 // }}}
 
-fn convert_err<T>(err: Result<T, anyhow::Error>) -> Result<T, PyErr> {
-    match err {
-        Ok(t) => Ok(t),
-        Err(e) => Err(StarlarkError::new_err(e.to_string())),
-    }
-}
-
-fn convert_serde_err<T>(err: Result<T, serde_json::Error>) -> Result<T, PyErr> {
-    match err {
-        Ok(t) => Ok(t),
-        Err(e) => Err(StarlarkError::new_err(format!("{}", e))),
-    }
-}
-// TODO: access to the linter
-
-#[pyclass]
-struct AstModule(starlark::syntax::AstModule);
-
-#[pyfunction]
-fn parse(filename: &str, content: &str) -> PyResult<AstModule> {
-    Ok(AstModule(convert_err(starlark::syntax::AstModule::parse(
-        filename,
-        content.to_string(),
-        &Dialect::Standard,
-    ))?))
-}
-
-#[pyclass]
-struct Globals(starlark::environment::Globals);
-
-#[pymethods]
-impl Globals {
-    #[new]
-    fn py_new() -> PyResult<Globals> {
-        Ok(Globals(starlark::environment::Globals::standard()))
-    }
-}
-
 fn value_to_pyobject(value: Value) -> PyResult<PyObject> {
     let json_val = convert_err(value.to_json())?;
     Python::with_gil(|py| {
@@ -137,6 +103,150 @@ fn pyobject_to_value<'v>(obj: PyObject, heap: &'v Heap) -> PyResult<Value<'v>> {
     })
 }
 
+// }}}
+
+// {{{ result conversions
+
+fn convert_err<T>(err: Result<T, anyhow::Error>) -> Result<T, PyErr> {
+    match err {
+        Ok(t) => Ok(t),
+        Err(e) => Err(StarlarkError::new_err(e.to_string())),
+    }
+}
+
+fn convert_serde_err<T>(err: Result<T, serde_json::Error>) -> Result<T, PyErr> {
+    match err {
+        Ok(t) => Ok(t),
+        Err(e) => Err(StarlarkError::new_err(format!("{}", e))),
+    }
+}
+
+// }}}
+
+// {{{ ResolvedSpan
+
+#[pyclass]
+struct ResolvedSpan(starlark::codemap::ResolvedSpan);
+
+#[pymethods]
+impl ResolvedSpan {
+    #[getter]
+    fn begin_line(&self) -> usize {
+        self.0.begin_line
+    }
+    fn begin_column(&self) -> usize {
+        self.0.begin_column
+    }
+    fn end_line(&self) -> usize {
+        self.0.end_line
+    }
+    fn end_column(&self) -> usize {
+        self.0.end_column
+    }
+}
+
+// }}}
+
+// {{{ ResolvedFileSpan
+
+#[pyclass]
+struct ResolvedFileSpan(starlark::codemap::ResolvedFileSpan);
+
+#[pymethods]
+impl ResolvedFileSpan {
+    #[getter]
+    fn file(&self) -> String {
+        self.0.file.clone()
+    }
+    #[getter]
+    fn span(&self) -> ResolvedSpan {
+        ResolvedSpan(self.0.span)
+    }
+}
+
+// }}}
+
+// {{{ Lint
+
+#[pyclass]
+struct Lint {
+    pub location: starlark::codemap::FileSpan,
+    #[pyo3(get)]
+    pub short_name: String,
+    #[pyo3(get)]
+    pub serious: bool,
+    #[pyo3(get)]
+    pub problem: String,
+    #[pyo3(get)]
+    pub original: String,
+}
+
+impl Display for Lint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.location, self.problem)
+    }
+}
+
+#[pymethods]
+impl Lint {
+    #[getter]
+    fn resolved_location(&self) -> ResolvedFileSpan {
+        ResolvedFileSpan(self.location.resolve())
+    }
+    fn __str__(&self) -> String {
+        self.to_string()
+    }
+}
+
+
+// }}}
+
+// {{{ AstModule
+
+#[pyclass]
+struct AstModule(starlark::syntax::AstModule);
+
+#[pyfunction]
+fn parse(filename: &str, content: &str) -> PyResult<AstModule> {
+    Ok(AstModule(convert_err(starlark::syntax::AstModule::parse(
+        filename,
+        content.to_string(),
+        &Dialect::Standard,
+    ))?))
+}
+
+#[pymethods]
+impl AstModule {
+    fn lint(&self) -> Vec<Lint> {
+        self.0.lint(None).map(|lint| Lint {
+            location: lint.location.dupe(),
+            short_name: lint.short_name.clone(),
+            serious: lint.serious,
+            problem: lint.problem.clone(),
+            original: lint.original.clone(),
+        })
+    }
+}
+
+// }}}
+
+// {{{ Globals
+
+#[pyclass]
+struct Globals(starlark::environment::Globals);
+
+#[pymethods]
+impl Globals {
+    #[new]
+    fn py_new() -> PyResult<Globals> {
+        Ok(Globals(starlark::environment::Globals::standard()))
+    }
+}
+
+// }}}
+
+// {{{ Module
+
 #[pyclass]
 struct Module(starlark::environment::Module);
 
@@ -152,6 +262,10 @@ impl Module {
         Ok(())
     }
 }
+
+// }}}
+
+// {{{ eval
 
 #[pyfunction]
 fn eval(module: &mut Module, ast: &PyCell<AstModule>, globals: &Globals) -> PyResult<PyObject> {
@@ -169,6 +283,8 @@ fn eval(module: &mut Module, ast: &PyCell<AstModule>, globals: &Globals) -> PyRe
         evaluator.eval_module(ast.replace(AstModule(empty_ast)).0, &globals.0),
     )?)
 }
+
+// }}}
 
 #[pymodule]
 #[pyo3(name = "starlark")]
