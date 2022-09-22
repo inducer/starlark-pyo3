@@ -261,7 +261,20 @@ impl Module {
         self.0.set(name, pyobject_to_value(obj, self.0.heap())?);
         Ok(())
     }
+
+    fn freeze(mod_cell: &PyCell<Module>) -> PyResult<FrozenModule> {
+        let module = mod_cell.replace(
+            Module(starlark::environment::Module::new())).0;
+        Ok(FrozenModule(convert_err(module.freeze())?))
+    }
 }
+
+// }}}
+
+// {{{ FrozenModule
+
+#[pyclass]
+struct FrozenModule(starlark::environment::FrozenModule);
 
 // }}}
 
@@ -289,9 +302,13 @@ fn eval(module: &mut Module, ast: &PyCell<AstModule>, globals: &Globals) -> PyRe
 #[pymodule]
 #[pyo3(name = "starlark")]
 fn starlark_py(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_class::<ResolvedSpan>()?;
+    m.add_class::<ResolvedFileSpan>()?;
+    m.add_class::<ResolvedSpan>()?;
     m.add_class::<AstModule>()?;
     m.add_class::<Globals>()?;
     m.add_class::<Module>()?;
+    m.add_class::<FrozenModule>()?;
     m.add_wrapped(wrap_pyfunction!(parse))?;
     m.add_wrapped(wrap_pyfunction!(eval))?;
     m.add("StarlarkError", _py.get_type::<StarlarkError>())?;
