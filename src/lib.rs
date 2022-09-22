@@ -30,7 +30,6 @@ use crate::pyo3::exceptions::PyException;
 use crate::pyo3::prelude::*;
 
 use crate::starlark::collections::SmallMap;
-use crate::starlark::syntax::Dialect;
 use crate::starlark::values::Heap;
 use crate::starlark::values::Value;
 use gazebo::prelude::*;
@@ -200,17 +199,101 @@ impl Lint {
 
 // }}}
 
+// {{{ DialectTypes
+
+#[pyclass]
+#[derive(Clone)]
+struct DialectTypes(starlark::syntax::DialectTypes);
+
+#[pymethods]
+impl DialectTypes {
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn DISABLE() -> Self {
+        DialectTypes(starlark::syntax::DialectTypes::Disable)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn PARSE_ONLY() -> Self {
+        DialectTypes(starlark::syntax::DialectTypes::ParseOnly)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn ENABLE() -> Self {
+        DialectTypes(starlark::syntax::DialectTypes::Enable)
+    }
+}
+
+// }}}
+
+// {{{ Dialect
+
+#[pyclass]
+#[derive(Clone)]
+struct Dialect(starlark::syntax::Dialect);
+
+#[pymethods]
+impl Dialect {
+    #[staticmethod]
+    fn standard() -> Self {
+        Dialect(starlark::syntax::Dialect::Standard)
+    }
+    #[staticmethod]
+    fn extended() -> Self {
+        Dialect(starlark::syntax::Dialect::Extended)
+    }
+
+    #[setter]
+    fn enable_def(&mut self, value: bool) {
+        self.0.enable_def = value;
+    }
+    #[setter]
+    fn enable_lambda(&mut self, value: bool) {
+        self.0.enable_lambda = value;
+    }
+    #[setter]
+    fn enable_load(&mut self, value: bool) {
+        self.0.enable_load = value;
+    }
+    #[setter]
+    fn enable_keyword_only_arguments(&mut self, value: bool) {
+        self.0.enable_keyword_only_arguments = value;
+    }
+    #[setter]
+    fn enable_types(&mut self, value: DialectTypes) {
+        self.0.enable_types = value.0;
+    }
+    #[setter]
+    fn enable_tabs(&mut self, value: bool) {
+        self.0.enable_tabs = value;
+    }
+    #[setter]
+    fn enable_load_reexport(&mut self, value: bool) {
+        self.0.enable_load_reexport = value;
+    }
+    #[setter]
+    fn enable_top_level_stmt(&mut self, value: bool) {
+        self.0.enable_top_level_stmt = value;
+    }
+}
+
+// }}}
+
 // {{{ AstModule
 
 #[pyclass]
 struct AstModule(starlark::syntax::AstModule);
 
 #[pyfunction]
-fn parse(filename: &str, content: &str) -> PyResult<AstModule> {
+fn parse(filename: &str, content: &str, dialect_opt: Option<Dialect>) -> PyResult<AstModule> {
+    let dialect = match dialect_opt {
+        Some(dialect) => dialect.0,
+        None => starlark::syntax::Dialect::Standard,
+    };
     Ok(AstModule(convert_err(starlark::syntax::AstModule::parse(
         filename,
         content.to_string(),
-        &Dialect::Standard,
+        &dialect,
     ))?))
 }
 
@@ -325,7 +408,12 @@ impl starlark::eval::FileLoader for FileLoader {
 
 fn empty_ast() -> AstModule {
     AstModule(
-        starlark::syntax::AstModule::parse("<empty>", "".to_string(), &Dialect::Standard).unwrap(),
+        starlark::syntax::AstModule::parse(
+            "<empty>",
+            "".to_string(),
+            &starlark::syntax::Dialect::Standard,
+        )
+        .unwrap(),
     )
 }
 
@@ -364,6 +452,8 @@ fn starlark_py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<ResolvedSpan>()?;
     m.add_class::<ResolvedFileSpan>()?;
     m.add_class::<ResolvedSpan>()?;
+    m.add_class::<DialectTypes>()?;
+    m.add_class::<Dialect>()?;
     m.add_class::<AstModule>()?;
     m.add_class::<Globals>()?;
     m.add_class::<Module>()?;
