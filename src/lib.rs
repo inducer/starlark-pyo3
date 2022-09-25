@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#![feature(iterator_try_collect)]
 
 extern crate anyhow;
 extern crate gazebo;
@@ -32,6 +33,7 @@ use crate::pyo3::prelude::*;
 use gazebo::prelude::*;
 
 use crate::starlark::collections::SmallMap;
+use pyo3::types::PyTuple;
 use starlark::eval::Arguments;
 use starlark::values::dict::Dict;
 use starlark::values::{Heap, NoSerialize, ProvidesStaticType, StarlarkValue, Value};
@@ -361,11 +363,19 @@ impl<'v> StarlarkValue<'v> for PythonCallableValue {
     fn invoke(
         &self,
         _me: Value<'v>,
-        _args: &Arguments<'v, '_>,
+        args: &Arguments<'v, '_>,
         eval: &mut starlark::eval::Evaluator<'v, '_>,
     ) -> anyhow::Result<Value<'v>> {
         Python::with_gil(|py| -> anyhow::Result<Value<'v>> {
-            convert_to_anyhow(pyobject_to_value(self.callable.call0(py)?, eval.heap()))
+            args.no_named_args()?;
+            let py_args: Vec<PyObject> = (args
+                .positions(eval.heap())?
+                .map(|v| -> PyResult<PyObject> { value_to_pyobject(v) }))
+            .try_collect()?;
+            convert_to_anyhow(pyobject_to_value(
+                self.callable.call1(py, PyTuple::new(py, py_args))?,
+                eval.heap(),
+            ))
         })
     }
 }

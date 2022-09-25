@@ -36,7 +36,7 @@ def dos2():
 
 res = f(a - z + zz)
 
-g_res = g()
+g_res = g(123)
 res
 """
 
@@ -45,9 +45,9 @@ glb = sl.Globals.standard()
 mod = sl.Module()
 mod["a"] = 5
 
-def g():
-    print("g called")
-    return 17
+def g(x):
+    print(f"g called with {x}")
+    return 2*x
 
 mod.add_callable("g", g)
 
