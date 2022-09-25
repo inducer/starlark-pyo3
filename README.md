@@ -1,6 +1,10 @@
 # Starlark-PyO3: Python bindings for starlark-rust
 
-This isn't even alpha software! There is almost nothing here.
+This exposes the
+[starlark-rust](https://github.com/facebookexperimental/starlark-rust/)
+interpreter for the
+[Starlark](https://github.com/bazelbuild/starlark/blob/master/spec.md)
+Python-like language to Python via [PyO3](https://pyo3.rs).
 
 To use this, make sure you have nightly rust available:
 ```
@@ -13,3 +17,6 @@ Then, to install into the current Python virtual environment:
 pip install maturin
 maturin develop
 ```
+
+*Status:* This is reasonably complete and usable, but it lacks tests,
+documentation, and a Python release. See the [example](example.py) for now.

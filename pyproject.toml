@@ -1,0 +1,17 @@
+[build-system]
+requires = ["maturin>=0.13,<0.14"]
+build-backend = "maturin"
+
+[project]
+name = "starlark-pyo3"
+version = "2022.1"
+description = "Wraps starlark-rust into Python"
+requires-python = ">=3.7"
+authors = [
+    { name = "Andreas Kloeckner", email = "inform@tiker.net" }
+    ]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
