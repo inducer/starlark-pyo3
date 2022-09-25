@@ -9,6 +9,10 @@ homepage = "https://github.com/inducer/starlark-pyo3"
 repository = "https://github.com/inducer/starlark-pyo3"
 readme = "README.md"
 
+exclude = [
+        "dist/*",
+        ]
+
 [lib]
 crate-type = ["cdylib"]
 name = "starlark"
