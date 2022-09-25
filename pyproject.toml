@@ -7,6 +7,7 @@ name = "starlark-pyo3"
 version = "2022.1"
 description = "Wraps starlark-rust into Python"
 requires-python = ">=3.7"
+license = {file = "LICENSE"}
 authors = [
     { name = "Andreas Kloeckner", email = "inform@tiker.net" }
     ]
@@ -15,3 +16,7 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
+
+[project.urls]
+homepage = "https://github.com/inducer/starlark-pyo3"
+

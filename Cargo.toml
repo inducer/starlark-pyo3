@@ -13,13 +13,6 @@ readme = "README.md"
 crate-type = ["cdylib"]
 name = "starlark"
 
-[package.metadata.maturin]
-classifier = [
-  "Programming Language :: Rust",
-]
-
-requires-python = ">=3.6"
-
 [dependencies]
 starlark = { git = 'https://github.com/facebookexperimental/starlark-rust.git' }
 anyhow = "^1.0.65"
