@@ -1,6 +1,6 @@
 import starlark as sl
 
-A_STAR ="""
+A_STAR = """
 load("zz.star", "zz")
 z = 3
 z = 4
@@ -45,13 +45,16 @@ glb = sl.Globals.standard()
 mod = sl.Module()
 mod["a"] = 5
 
+
 def g(x):
     print(f"g called with {x}")
     return 2*x
 
+
 mod.add_callable("g", g)
 
 ast = sl.parse("a.star", A_STAR)
+
 
 def load(name):
     if name == "zz.star":
@@ -61,6 +64,7 @@ def load(name):
         return mod.freeze()
     else:
         raise FileNotFoundError(name)
+
 
 for lnt in ast.lint():
     print(lnt)

@@ -18,5 +18,5 @@ pip install maturin
 maturin develop
 ```
 
-*Status:* This is reasonably complete and usable, but it lacks tests,
-documentation, and a Python release. See the [example](example.py) for now.
+*Status:* This is reasonably complete and usable, but it lacks
+documentation and a Python release. See the [example](example.py) for now.
