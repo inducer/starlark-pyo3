@@ -5,6 +5,8 @@ on:
     branches:
       - main
   pull_request:
+  schedule:
+  - cron:  '17 3 * * 0'
 
 jobs:
   linux:
@@ -69,3 +71,61 @@ jobs:
         with:
           command: upload
           args: --skip-existing *
+
+  pytest:
+    name: Pytest
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.7', '3.8', '3.x']
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: 'requirements-dev.txt'
+
+      - name: Create virtual environment
+        run: |
+          python -m venv venv
+          echo "$GITHUB_WORKSPACE/venv/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+
+      - name: Install
+        run: |
+          source activate
+          maturin develop
+
+      - name: Run tests
+        run: pytest --tb=native test
+
+      - name: Run example
+        run: python example.py
+
+  flake8:
+      name: Flake8
+      runs-on: ubuntu-latest
+      steps:
+      -   uses: actions/checkout@v2
+      -
+          uses: actions/setup-python@v1
+          with:
+              # matches compat target in pyproject.toml
+              python-version: '3.7'
+      -   name: "Main Script"
+          run: |
+              curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-flake8.sh
+              . ./prepare-and-run-flake8.sh test example.py
