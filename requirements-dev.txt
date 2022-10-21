@@ -1,2 +1,6 @@
 maturin
 pytest
+
+sphinx
+sphinx-copybutton
+furo
