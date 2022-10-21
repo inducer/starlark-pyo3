@@ -135,6 +135,18 @@ fn convert_to_anyhow<T>(err: Result<T, PyErr>) -> Result<T, anyhow::Error> {
 
 // {{{ ResolvedSpan
 
+/// .. autoattribute:: begin_line
+///
+///     A :class:`int`.
+/// .. autoattribute:: begin_column
+///
+///     A :class:`int`.
+/// .. autoattribute:: end_line
+///
+///     A :class:`int`.
+/// .. autoattribute:: end_column
+///
+///     A :class:`int`.
 #[pyclass]
 struct ResolvedSpan(starlark::codemap::ResolvedSpan);
 
@@ -159,6 +171,12 @@ impl ResolvedSpan {
 
 // {{{ ResolvedFileSpan
 
+/// .. autoattribute:: file
+///
+///     A :class:`str`.
+/// .. autoattribute:: span
+///
+///     A :class:`ResolvedSpan`.
 #[pyclass]
 struct ResolvedFileSpan(starlark::codemap::ResolvedFileSpan);
 
@@ -178,6 +196,23 @@ impl ResolvedFileSpan {
 
 // {{{ Lint
 
+/// .. automethod:: __str__
+///
+/// .. autoattribute:: resolved_location
+///
+///     A :class:`ResolvedFileSpan`.
+/// .. autoattribute:: short_name
+///
+///     A :class:`str`.
+/// .. autoattribute:: serious
+///
+///     A :class:`bool`.
+/// .. autoattribute:: problem
+///
+///     A :class:`str`.
+/// .. autoattribute:: original
+///
+///     A :class:`str`.
 #[pyclass]
 struct Lint {
     pub location: starlark::codemap::FileSpan,
@@ -212,6 +247,9 @@ impl Lint {
 
 // {{{ DialectTypes
 
+/// .. attribute:: DISABLE
+/// .. attribute:: PARSE_ONLY
+/// .. attribute:: ENABLE
 #[pyclass]
 #[derive(Clone)]
 struct DialectTypes(starlark::syntax::DialectTypes);
@@ -239,6 +277,33 @@ impl DialectTypes {
 
 // {{{ Dialect
 
+/// .. automethod:: standard
+/// .. automethod:: extended
+/// .. autoattribute:: enable_def
+///
+///     A :class:`bool`.
+/// .. autoattribute:: enable_lambda
+///
+///     A :class:`bool`.
+/// .. autoattribute:: enable_keyword_only_arguments
+///
+///     A :class:`bool`.
+/// .. autoattribute:: enable_types
+///
+///     A value of type :class:`DialectTypes`.
+/// .. autoattribute:: enable_tabs
+///
+///     A :class:`bool`.
+/// .. autoattribute:: enable_load_reexport
+/// 
+///     A :class:`bool`.
+/// .. autoattribute:: enable_top_level_stmt
+/// 
+///     A :class:`bool`.
+///
+/// .. note::
+///
+///     These attributes are only writable (not readable) for the moment.
 #[pyclass]
 #[derive(Clone)]
 struct Dialect(starlark::syntax::Dialect);
@@ -246,10 +311,12 @@ struct Dialect(starlark::syntax::Dialect);
 #[pymethods]
 impl Dialect {
     #[staticmethod]
+    #[pyo3(text_signature = "() -> Dialect")]
     fn standard() -> Self {
         Dialect(starlark::syntax::Dialect::Standard)
     }
     #[staticmethod]
+    #[pyo3(text_signature = "() -> Dialect")]
     fn extended() -> Self {
         Dialect(starlark::syntax::Dialect::Extended)
     }
@@ -292,10 +359,16 @@ impl Dialect {
 
 // {{{ AstModule
 
+/// See :func:`parse` to create objects of this type,
+/// and :func:`eval` to evaluate them.
+///
+/// .. automethod:: lint
 #[pyclass]
 struct AstModule(starlark::syntax::AstModule);
 
+/// Parse Starlark source code as a string and return an AST.
 #[pyfunction]
+#[pyo3(text_signature = "(filename: str, content: str, dialect: Optional[Dialect] = None) -> AstModule")]
 fn parse(filename: &str, content: &str, dialect_opt: Option<Dialect>) -> PyResult<AstModule> {
     let dialect = match dialect_opt {
         Some(dialect) => dialect.0,
@@ -308,8 +381,10 @@ fn parse(filename: &str, content: &str, dialect_opt: Option<Dialect>) -> PyResul
     ))?))
 }
 
+/// .. automethod:: lint
 #[pymethods]
 impl AstModule {
+    #[pyo3(text_signature = "(self) -> list[Lint]")]
     fn lint(&self) -> Vec<Lint> {
         self.0.lint(None).map(|lint| Lint {
             location: lint.location.dupe(),
@@ -325,17 +400,21 @@ impl AstModule {
 
 // {{{ Globals
 
+/// .. automethod:: standard
+/// .. automethod:: extended
 #[pyclass]
 struct Globals(starlark::environment::Globals);
 
 #[pymethods]
 impl Globals {
     #[staticmethod]
+    #[pyo3(text_signature = "() -> Globals")]
     fn standard() -> PyResult<Globals> {
         Ok(Globals(starlark::environment::Globals::standard()))
     }
 
     #[staticmethod]
+    #[pyo3(text_signature = "() -> Globals")]
     fn extended() -> PyResult<Globals> {
         Ok(Globals(starlark::environment::Globals::extended()))
     }
@@ -384,7 +463,12 @@ impl<'v> StarlarkValue<'v> for PythonCallableValue {
 
 // {{{ Module
 
+/// .. automethod:: __getitem__
+/// .. automethod:: __setitem__
+/// .. automethod:: add_callable
+/// .. automethod:: freeze
 #[pyclass]
+#[pyo3(text_signature = "() -> None")]
 struct Module(starlark::environment::Module);
 
 #[pymethods]
@@ -406,6 +490,7 @@ impl Module {
         Ok(())
     }
 
+    #[pyo3(text_signature = "(self, name: str, callable: Callable) -> None")]
     fn add_callable(&self, name: &str, callable: PyObject) {
         let b = self
             .0
@@ -414,6 +499,7 @@ impl Module {
         self.0.set(name, b);
     }
 
+    #[pyo3(text_signature = "(self) -> FrozenModule")]
     fn freeze(mod_cell: &PyCell<Module>) -> PyResult<FrozenModule> {
         let module = mod_cell
             .replace(Module(starlark::environment::Module::new()))
@@ -434,6 +520,7 @@ struct FrozenModule(starlark::environment::FrozenModule);
 // {{{ FileLoader
 
 #[pyclass]
+#[pyo3(text_signature = "(load_func: Callable[[str], FrozenModule]) -> None")]
 struct FileLoader {
     callable: PyObject,
 }
@@ -475,7 +562,12 @@ fn empty_ast() -> AstModule {
     )
 }
 
+/// Note that this *consumes* the *ast* argument, which is unusable after 
+/// being passed to this fucntion.
+///
+/// :returns: the value returned by the evaluation, after :ref:`object-conversion`.
 #[pyfunction]
+#[pyo3(text_signature = "(module: Module, ast: AstModule, globals: Globals, file_loader: Optional[FileLoader]) -> object")]
 fn eval(
     module: &mut Module,
     ast: &PyCell<AstModule>,
@@ -509,7 +601,7 @@ fn eval(
 fn starlark_py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<ResolvedSpan>()?;
     m.add_class::<ResolvedFileSpan>()?;
-    m.add_class::<ResolvedSpan>()?;
+    m.add_class::<Lint>()?;
     m.add_class::<DialectTypes>()?;
     m.add_class::<Dialect>()?;
     m.add_class::<AstModule>()?;

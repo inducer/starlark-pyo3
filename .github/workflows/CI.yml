@@ -113,7 +113,48 @@ jobs:
         run: pytest --tb=native test
 
       - name: Run example
-        run: python example.py
+        run: |
+            cd examples
+            for f in *.py; do
+                python "$f"
+            done
+
+
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+          cache: 'pip'
+          cache-dependency-path: 'requirements-dev.txt'
+
+      - name: Create virtual environment
+        run: |
+          python -m venv venv
+          echo "$GITHUB_WORKSPACE/venv/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+
+      - name: Install and build docs
+        run: |
+          source activate
+          maturin develop
+          cd doc
+          make html SPHINXOPTS="-W --keep-going -n"    
 
   flake8:
       name: Flake8
@@ -128,4 +169,4 @@ jobs:
       -   name: "Main Script"
           run: |
               curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-flake8.sh
-              . ./prepare-and-run-flake8.sh test example.py
+              . ./prepare-and-run-flake8.sh test examples
