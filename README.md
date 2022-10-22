@@ -18,4 +18,6 @@ pip install maturin
 maturin develop
 ```
 
+- [Documentation](https://starlark-pyo3.readthedocs.io/en/latest/)
+
 *Status:* This is reasonably complete and usable.
