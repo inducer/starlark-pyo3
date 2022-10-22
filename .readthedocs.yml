@@ -10,9 +10,9 @@ build:
   tools:
     python: "3.10"
   jobs:
-    pre_create_environment: |
-      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-      rustup default nightly
+    pre_create_environment:
+    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    - rustup default nightly
 
 python:
   install:
