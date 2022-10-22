@@ -170,7 +170,7 @@ jobs:
 
                 echo "${DOC_UPLOAD_KEY}" > doc_upload_key
                 chmod 0600 doc_upload_key
-                RSYNC_RSH="ssh -F doc_upload_ssh_config" rsync --verbose --archive --delete _build/html/* doc-upload:doc/starlark-pyo3
+                RSYNC_RSH="ssh -F doc_upload_ssh_config" rsync --verbose --archive --delete doc/_build/html/* doc-upload:doc/starlark-pyo3
             fi
         env:
             DOC_UPLOAD_KEY: ${{ secrets.DOC_UPLOAD_KEY }}
