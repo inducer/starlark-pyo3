@@ -1,9 +1,9 @@
 Starlark-PyO3: Python bindings for starlark-rust
 ================================================
 
-.. image:: https://github.com/inducer/stalark-pyo3/workflows/CI/badge.svg?branch=main&event=push
+.. image:: https://github.com/inducer/starlark-pyo3/workflows/CI/badge.svg?branch=main&event=push
     :alt: Github Build Status
-    :target: https://github.com/inducer/stalark-pyo3/actions?query=branch%3Amain+workflow%3ACI+event%3Apush
+    :target: https://github.com/inducer/starlark-pyo3/actions?query=branch%3Amain+workflow%3ACI+event%3Apush
 .. image:: https://badge.fury.io/py/starlark-pyo3.png
     :alt: Python Package Index Release Page
     :target: https://pypi.org/project/starlark-pyo3/
