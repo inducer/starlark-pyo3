@@ -7,7 +7,7 @@ license = "MIT"
 description = "Python bindings for starlark-rust"
 homepage = "https://github.com/inducer/starlark-pyo3"
 repository = "https://github.com/inducer/starlark-pyo3"
-readme = "README.md"
+readme = "README.rst"
 
 exclude = [
         "dist/*",
