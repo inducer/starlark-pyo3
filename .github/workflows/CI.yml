@@ -154,7 +154,26 @@ jobs:
           source activate
           maturin develop
           cd doc
-          make html SPHINXOPTS="-W --keep-going -n"    
+          make html SPHINXOPTS="-W --keep-going -n"
+
+      - name: Upload docs
+        run: |
+            if "$GITHUB_REF" = "refs/heads/main"; then
+                cat > doc_upload_ssh_config <<END
+            Host doc-upload
+                User doc
+                IdentityFile doc_upload_key
+                IdentitiesOnly yes
+                Hostname marten.tiker.net
+                StrictHostKeyChecking false
+            END
+
+                echo "${DOC_UPLOAD_KEY}" > doc_upload_key
+                chmod 0600 doc_upload_key
+                RSYNC_RSH="ssh -F doc_upload_ssh_config" rsync --verbose --archive --delete _build/html/* doc-upload:doc/starlark-pyo3
+            fi
+        env:
+            DOC_UPLOAD_KEY: ${{ secrets.DOC_UPLOAD_KEY }}
 
   flake8:
       name: Flake8
