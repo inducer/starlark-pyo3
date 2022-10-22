@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - v*
   pull_request:
   schedule:
   - cron:  '17 3 * * 0'
@@ -118,8 +120,6 @@ jobs:
             for f in *.py; do
                 python "$f"
             done
-
-
 
   docs:
     name: Documentation
