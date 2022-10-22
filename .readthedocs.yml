@@ -9,7 +9,10 @@ build:
   os: "ubuntu-22.04"
   tools:
     python: "3.10"
-    rust: "nightly"
+  jobs:
+    pre_create_environment: |
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+      rustup default nightly
 
 python:
   install:
