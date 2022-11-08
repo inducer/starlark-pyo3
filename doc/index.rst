@@ -25,6 +25,7 @@ Python-like language to Python via `PyO3 <https://pyo3.rs>`__.
 -   **Python-like**. Python is a widely used language. Keeping the language
     similar to Python can reduce the learning curve and make the semantics more
     obvious to users.
+
 Here's an example:
 
 .. literalinclude:: ../examples/demo.py
