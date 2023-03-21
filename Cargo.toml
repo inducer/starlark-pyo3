@@ -29,6 +29,10 @@ serde_json = "1.0"
 num-bigint = "0.4.3"
 thiserror = "^1.0.35"
 gazebo = "^0.8.0"
+allocative = "^0.2"
+dupe = "^0.8.1"
 
 [patch.crates-io]
 starlark = { git = 'https://github.com/facebookexperimental/starlark-rust/' }
+allocative = { git = 'https://github.com/facebookexperimental/starlark-rust/' }
+dupe = { git = 'https://github.com/facebookexperimental/starlark-rust/' }
