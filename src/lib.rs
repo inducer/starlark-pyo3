@@ -16,8 +16,11 @@
  * limitations under the License.
  */
 #![feature(iterator_try_collect)]
+#![feature(trivial_bounds)]
 
+extern crate allocative;
 extern crate anyhow;
+extern crate dupe;
 extern crate gazebo;
 extern crate pyo3;
 extern crate serde_json;
@@ -33,9 +36,12 @@ use crate::pyo3::prelude::*;
 use gazebo::prelude::*;
 
 use crate::starlark::collections::SmallMap;
+use allocative::Allocative;
+use dupe::Dupe;
 use pyo3::types::PyTuple;
 use starlark::eval::Arguments;
 use starlark::values::dict::Dict;
+use starlark::values::list::AllocList;
 use starlark::values::{Heap, NoSerialize, ProvidesStaticType, StarlarkValue, Value};
 use starlark::{starlark_simple_value, starlark_type};
 use thiserror::Error;
@@ -71,7 +77,7 @@ fn serde_to_starlark<'v>(x: serde_json::Value, heap: &'v Heap) -> anyhow::Result
         }
         serde_json::Value::String(x) => Ok(heap.alloc(x)),
         serde_json::Value::Array(x) => {
-            Ok(heap.alloc_list_iter(x.into_try_map(|v| serde_to_starlark(v, heap))?))
+            Ok(heap.alloc(AllocList(x.into_try_map(|v| serde_to_starlark(v, heap))?)))
         }
         serde_json::Value::Object(x) => {
             let mut mp = SmallMap::with_capacity(x.len());
@@ -295,10 +301,10 @@ impl DialectTypes {
 ///
 ///     A :class:`bool`.
 /// .. autoattribute:: enable_load_reexport
-/// 
+///
 ///     A :class:`bool`.
 /// .. autoattribute:: enable_top_level_stmt
-/// 
+///
 ///     A :class:`bool`.
 ///
 /// .. note::
@@ -368,7 +374,9 @@ struct AstModule(starlark::syntax::AstModule);
 
 /// Parse Starlark source code as a string and return an AST.
 #[pyfunction]
-#[pyo3(text_signature = "(filename: str, content: str, dialect: Optional[Dialect] = None) -> AstModule")]
+#[pyo3(
+    text_signature = "(filename: str, content: str, dialect: Optional[Dialect] = None) -> AstModule"
+)]
 fn parse(filename: &str, content: &str, dialect_opt: Option<Dialect>) -> PyResult<AstModule> {
     let dialect = match dialect_opt {
         Some(dialect) => dialect.0,
@@ -424,8 +432,9 @@ impl Globals {
 
 // {{{ PythonCallableValue
 
-#[derive(Debug, ProvidesStaticType, NoSerialize)]
+#[derive(Debug, ProvidesStaticType, NoSerialize, Allocative)]
 struct PythonCallableValue {
+    #[allocative(skip)]
     callable: PyObject,
 }
 starlark_simple_value!(PythonCallableValue);
@@ -562,12 +571,14 @@ fn empty_ast() -> AstModule {
     )
 }
 
-/// Note that this *consumes* the *ast* argument, which is unusable after 
+/// Note that this *consumes* the *ast* argument, which is unusable after
 /// being passed to this fucntion.
 ///
 /// :returns: the value returned by the evaluation, after :ref:`object-conversion`.
 #[pyfunction]
-#[pyo3(text_signature = "(module: Module, ast: AstModule, globals: Globals, file_loader: Optional[FileLoader]) -> object")]
+#[pyo3(
+    text_signature = "(module: Module, ast: AstModule, globals: Globals, file_loader: Optional[FileLoader]) -> object"
+)]
 fn eval(
     module: &mut Module,
     ast: &PyCell<AstModule>,
