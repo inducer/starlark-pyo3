@@ -15,5 +15,5 @@ with open("../pyproject.toml", "rb") as f:
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 intersphinx_mapping = {
-    "https://docs.python.org/dev": None,
+        "python": ("https://docs.python.org/dev", None),
 }
