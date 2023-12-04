@@ -17,17 +17,12 @@ def f():
 def test_linter():
     ast = sl.parse("lint.star", LINT_STAR)
 
-    serious = 0
-    not_serious = 0
+    severities = {}
     for lnt in ast.lint():
-        print(lnt.serious, lnt)
-        if lnt.serious:
-            serious += 1
-        else:
-            not_serious += 1
+        print(lnt.severity, lnt)
+        severities[repr(lnt.severity)] = severities.get(lnt.severity, 0) + 1
 
-    assert serious == 1
-    assert not_serious == 2
+    assert severities == {"Warning": 1, "Disabled": 1}
 
 # }}}
 
