@@ -16,12 +16,14 @@ References to Source Locations
 ------------------------------
 
 .. autoclass:: ResolvedFileSpan
+.. autoclass:: ResolvedPos
 .. autoclass:: ResolvedSpan
 
 Diagnostics
 -----------
 
 .. autoexception:: StarlarkError
+.. autoclass:: EvalSeverity
 .. autoclass:: Lint
 
 Dialect
@@ -38,6 +40,7 @@ AST
 Globals
 -------
 
+.. autoclass:: LibraryExtension
 .. autoclass:: Globals
 
 Modules

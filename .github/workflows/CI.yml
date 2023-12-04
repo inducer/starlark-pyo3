@@ -50,7 +50,7 @@ jobs:
       with:
         command: build
         rust-toolchain: stable
-        args: --release -o dist --universal2 --find-interpreter
+        args: --release -o dist --find-interpreter
     - name: Upload wheels
       uses: actions/upload-artifact@v2
       with:
@@ -104,7 +104,7 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly
+          toolchain: stable
 
       - name: Install
         run: |
@@ -147,7 +147,7 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly
+          toolchain: stable
 
       - name: Install and build docs
         run: |
@@ -184,7 +184,7 @@ jobs:
           uses: actions/setup-python@v4
           with:
               # matches compat target in pyproject.toml
-              python-version: '3.7'
+              python-version: '3.8'
       -   name: "Main Script"
           run: |
               curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-flake8.sh

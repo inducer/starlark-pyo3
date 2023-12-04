@@ -15,8 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#![feature(iterator_try_collect)]
-#![feature(trivial_bounds)]
 
 extern crate allocative;
 extern crate anyhow;
@@ -25,6 +23,7 @@ extern crate gazebo;
 extern crate pyo3;
 extern crate serde_json;
 extern crate starlark;
+extern crate starlark_derive;
 extern crate thiserror;
 
 use std::fmt::{self, Display};
@@ -39,11 +38,13 @@ use crate::starlark::collections::SmallMap;
 use allocative::Allocative;
 use dupe::Dupe;
 use pyo3::types::PyTuple;
+use starlark::analysis::AstModuleLint;
 use starlark::eval::Arguments;
+use starlark::starlark_simple_value;
 use starlark::values::dict::Dict;
 use starlark::values::list::AllocList;
 use starlark::values::{Heap, NoSerialize, ProvidesStaticType, StarlarkValue, Value};
-use starlark::{starlark_simple_value, starlark_type};
+use starlark_derive::starlark_value;
 use thiserror::Error;
 
 create_exception!(starlark, StarlarkError, PyException);
@@ -139,37 +140,49 @@ fn convert_to_anyhow<T>(err: Result<T, PyErr>) -> Result<T, anyhow::Error> {
 
 // }}}
 
+// {{{ ResolvedPos
+
+/// .. autoattribute:: line
+///
+///     A :class:`int`.
+/// .. autoattribute:: column
+///
+///     A :class:`int`.
+#[pyclass]
+struct ResolvedPos(starlark::codemap::ResolvedPos);
+
+#[pymethods]
+impl ResolvedPos {
+    #[getter]
+    fn line(&self) -> usize {
+        self.0.line
+    }
+    fn column(&self) -> usize {
+        self.0.column
+    }
+}
+
+// }}}
+
 // {{{ ResolvedSpan
 
-/// .. autoattribute:: begin_line
+/// .. autoattribute:: begin
 ///
-///     A :class:`int`.
-/// .. autoattribute:: begin_column
+///     A :class:`ResolvedPos`.
+/// .. autoattribute:: end
 ///
-///     A :class:`int`.
-/// .. autoattribute:: end_line
-///
-///     A :class:`int`.
-/// .. autoattribute:: end_column
-///
-///     A :class:`int`.
+///     A :class:`ResolvedPos`.
 #[pyclass]
 struct ResolvedSpan(starlark::codemap::ResolvedSpan);
 
 #[pymethods]
 impl ResolvedSpan {
     #[getter]
-    fn begin_line(&self) -> usize {
-        self.0.begin_line
+    fn begin(&self) -> ResolvedPos {
+        ResolvedPos(self.0.begin)
     }
-    fn begin_column(&self) -> usize {
-        self.0.begin_column
-    }
-    fn end_line(&self) -> usize {
-        self.0.end_line
-    }
-    fn end_column(&self) -> usize {
-        self.0.end_column
+    fn end(&self) -> ResolvedPos {
+        ResolvedPos(self.0.end)
     }
 }
 
@@ -200,6 +213,53 @@ impl ResolvedFileSpan {
 
 // }}}
 
+// {{{ EvalSeverity
+
+/// .. attribute:: Error
+/// .. attribute:: Warning
+/// .. attribute:: Advice
+/// .. attribute:: Disabled
+#[pyclass]
+#[derive(Clone)]
+struct EvalSeverity(starlark::analysis::EvalSeverity);
+
+#[pymethods]
+impl EvalSeverity {
+    fn __repr__(&self) -> String {
+        match self.0 {
+            starlark::analysis::EvalSeverity::Error => "Error".to_string(),
+            starlark::analysis::EvalSeverity::Warning => "Warning".to_string(),
+            starlark::analysis::EvalSeverity::Advice => "Advice".to_string(),
+            starlark::analysis::EvalSeverity::Disabled => "Disabled".to_string(),
+        }
+    }
+    fn __str__(&self) -> String {
+        self.__repr__()
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn Error() -> Self {
+        EvalSeverity(starlark::analysis::EvalSeverity::Error)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn Warning() -> Self {
+        EvalSeverity(starlark::analysis::EvalSeverity::Warning)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn Advice() -> Self {
+        EvalSeverity(starlark::analysis::EvalSeverity::Advice)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn Disabled() -> Self {
+        EvalSeverity(starlark::analysis::EvalSeverity::Disabled)
+    }
+}
+
+// }}}
+
 // {{{ Lint
 
 /// .. automethod:: __str__
@@ -210,9 +270,9 @@ impl ResolvedFileSpan {
 /// .. autoattribute:: short_name
 ///
 ///     A :class:`str`.
-/// .. autoattribute:: serious
+/// .. autoattribute:: severity
 ///
-///     A :class:`bool`.
+///     A :class:`EvalSeverity`.
 /// .. autoattribute:: problem
 ///
 ///     A :class:`str`.
@@ -224,8 +284,7 @@ struct Lint {
     pub location: starlark::codemap::FileSpan,
     #[pyo3(get)]
     pub short_name: String,
-    #[pyo3(get)]
-    pub serious: bool,
+    pub severity: starlark::analysis::EvalSeverity,
     #[pyo3(get)]
     pub problem: String,
     #[pyo3(get)]
@@ -240,6 +299,10 @@ impl Display for Lint {
 
 #[pymethods]
 impl Lint {
+    #[getter]
+    fn severity(&self) -> EvalSeverity {
+        EvalSeverity(self.severity)
+    }
     #[getter]
     fn resolved_location(&self) -> ResolvedFileSpan {
         ResolvedFileSpan(self.location.resolve())
@@ -291,19 +354,22 @@ impl DialectTypes {
 /// .. autoattribute:: enable_lambda
 ///
 ///     A :class:`bool`.
+/// .. autoattribute:: enable_load
+///
+///     A :class:`bool`.
 /// .. autoattribute:: enable_keyword_only_arguments
 ///
 ///     A :class:`bool`.
 /// .. autoattribute:: enable_types
 ///
 ///     A value of type :class:`DialectTypes`.
-/// .. autoattribute:: enable_tabs
-///
-///     A :class:`bool`.
 /// .. autoattribute:: enable_load_reexport
 ///
 ///     A :class:`bool`.
 /// .. autoattribute:: enable_top_level_stmt
+///
+///     A :class:`bool`.
+/// .. autoattribute:: enable_f_strings
 ///
 ///     A :class:`bool`.
 ///
@@ -348,16 +414,16 @@ impl Dialect {
         self.0.enable_types = value.0;
     }
     #[setter]
-    fn enable_tabs(&mut self, value: bool) {
-        self.0.enable_tabs = value;
-    }
-    #[setter]
     fn enable_load_reexport(&mut self, value: bool) {
         self.0.enable_load_reexport = value;
     }
     #[setter]
     fn enable_top_level_stmt(&mut self, value: bool) {
         self.0.enable_top_level_stmt = value;
+    }
+    #[setter]
+    fn enable_f_strings(&mut self, value: bool) {
+        self.0.enable_f_strings = value;
     }
 }
 
@@ -397,7 +463,7 @@ impl AstModule {
         self.0.lint(None).map(|lint| Lint {
             location: lint.location.dupe(),
             short_name: lint.short_name.clone(),
-            serious: lint.serious,
+            severity: lint.severity,
             problem: lint.problem.clone(),
             original: lint.original.clone(),
         })
@@ -406,10 +472,112 @@ impl AstModule {
 
 // }}}
 
+// {{{ LibraryExtension
+
+/// .. attribute:: StructType
+/// .. attribute:: RecordType
+/// .. attribute:: EnumType
+/// .. attribute:: Map
+/// .. attribute:: Filter
+/// .. attribute:: Partial
+/// .. attribute:: ExperimentalRegex
+/// .. attribute:: Debug
+/// .. attribute:: Print
+/// .. attribute:: Pprint
+/// .. attribute:: Breakpoint
+/// .. attribute:: Json
+/// .. attribute:: Typing
+/// .. attribute:: Internal
+/// .. attribute:: CallStack
+#[pyclass]
+#[derive(Clone)]
+struct LibraryExtension(starlark::environment::LibraryExtension);
+
+#[pymethods]
+impl LibraryExtension {
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn StructType() -> Self {
+        LibraryExtension(starlark::environment::LibraryExtension::StructType)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn RecordType() -> Self {
+        LibraryExtension(starlark::environment::LibraryExtension::RecordType)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn EnumType() -> Self {
+        LibraryExtension(starlark::environment::LibraryExtension::EnumType)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn Map() -> Self {
+        LibraryExtension(starlark::environment::LibraryExtension::Map)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn Filter() -> Self {
+        LibraryExtension(starlark::environment::LibraryExtension::Filter)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn Partial() -> Self {
+        LibraryExtension(starlark::environment::LibraryExtension::Partial)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn ExperimentalRegex() -> Self {
+        LibraryExtension(starlark::environment::LibraryExtension::ExperimentalRegex)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn Debug() -> Self {
+        LibraryExtension(starlark::environment::LibraryExtension::Debug)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn Print() -> Self {
+        LibraryExtension(starlark::environment::LibraryExtension::Print)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn Pprint() -> Self {
+        LibraryExtension(starlark::environment::LibraryExtension::Pprint)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn Breakpoint() -> Self {
+        LibraryExtension(starlark::environment::LibraryExtension::Breakpoint)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn Json() -> Self {
+        LibraryExtension(starlark::environment::LibraryExtension::Json)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn Typing() -> Self {
+        LibraryExtension(starlark::environment::LibraryExtension::Typing)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn Internal() -> Self {
+        LibraryExtension(starlark::environment::LibraryExtension::Internal)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn CallStack() -> Self {
+        LibraryExtension(starlark::environment::LibraryExtension::CallStack)
+    }
+}
+
+// }}}
+
 // {{{ Globals
 
 /// .. automethod:: standard
-/// .. automethod:: extended
+/// .. automethod:: extended_by
 #[pyclass]
 struct Globals(starlark::environment::Globals);
 
@@ -423,8 +591,11 @@ impl Globals {
 
     #[staticmethod]
     #[pyo3(text_signature = "() -> Globals")]
-    fn extended() -> PyResult<Globals> {
-        Ok(Globals(starlark::environment::Globals::extended()))
+    fn extended_by(extensions: Vec<LibraryExtension>) -> PyResult<Globals> {
+        let exts: Vec<starlark::environment::LibraryExtension> =
+            extensions.iter().map(|ext| ext.0).collect();
+
+        Ok(Globals(starlark::environment::Globals::extended_by(&exts)))
     }
 }
 
@@ -445,9 +616,8 @@ impl Display for PythonCallableValue {
     }
 }
 
+#[starlark_value(type = "python_callable_value")]
 impl<'v> StarlarkValue<'v> for PythonCallableValue {
-    starlark_type!("python_callable_value");
-
     fn invoke(
         &self,
         _me: Value<'v>,
@@ -459,7 +629,7 @@ impl<'v> StarlarkValue<'v> for PythonCallableValue {
             let py_args: Vec<PyObject> = (args
                 .positions(eval.heap())?
                 .map(|v| -> PyResult<PyObject> { value_to_pyobject(v) }))
-            .try_collect()?;
+            .collect::<PyResult<Vec<PyObject>>>()?;
             convert_to_anyhow(pyobject_to_value(
                 self.callable.call1(py, PyTuple::new(py, py_args))?,
                 eval.heap(),
@@ -585,8 +755,6 @@ fn eval(
     globals: &Globals,
     file_loader: Option<&PyCell<FileLoader>>,
 ) -> PyResult<PyObject> {
-    let mut evaluator = starlark::eval::Evaluator::new(&module.0);
-
     let tail = |evaluator: &mut starlark::eval::Evaluator| {
         // Stupid: eval_module consumes the AST.
         // Python would like it to live on,  but starlark-rust says no.
@@ -598,10 +766,14 @@ fn eval(
     match file_loader {
         Some(loader_cell) => {
             let loader_ref = loader_cell.borrow();
+            let mut evaluator = starlark::eval::Evaluator::new(&module.0);
             evaluator.set_loader(&*loader_ref);
             tail(&mut evaluator)
         }
-        None => tail(&mut evaluator),
+        None => {
+            let mut evaluator = starlark::eval::Evaluator::new(&module.0);
+            tail(&mut evaluator)
+        }
     }
 }
 
@@ -610,12 +782,15 @@ fn eval(
 #[pymodule]
 #[pyo3(name = "starlark")]
 fn starlark_py(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_class::<ResolvedPos>()?;
     m.add_class::<ResolvedSpan>()?;
     m.add_class::<ResolvedFileSpan>()?;
+    m.add_class::<EvalSeverity>()?;
     m.add_class::<Lint>()?;
     m.add_class::<DialectTypes>()?;
     m.add_class::<Dialect>()?;
     m.add_class::<AstModule>()?;
+    m.add_class::<LibraryExtension>()?;
     m.add_class::<Globals>()?;
     m.add_class::<Module>()?;
     m.add_class::<FrozenModule>()?;
