@@ -27,6 +27,26 @@ jobs:
         name: wheels
         path: dist
 
+  linux-aarch64:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Setup QEMU
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: arm64
+    - uses: actions/checkout@v3
+    - uses: messense/maturin-action@v1
+      with:
+        manylinux: auto
+        command: build
+        rust-toolchain: stable
+        args: --release --sdist -o dist --find-interpreter
+    - name: Upload wheels
+      uses: actions/upload-artifact@v2
+      with:
+        name: wheels
+        path: dist
+
   windows:
     runs-on: windows-latest
     steps:
