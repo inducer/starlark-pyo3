@@ -14,18 +14,18 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    - uses: messense/maturin-action@v1
+    - uses: actions/checkout@v4
+    - uses: PyO3/maturin-action@v1
       with:
         manylinux: auto
         command: build
         rust-toolchain: stable
         args: --release --sdist -o dist --find-interpreter
     - name: Upload wheels
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
-        name: wheels
-        path: dist
+        name: wheels-linux
+        path: dist/*.whl
   
   linux-cross:
     runs-on: ubuntu-latest
@@ -33,8 +33,8 @@ jobs:
       matrix:
         target: [aarch64, armv7]
     steps:
-    - uses: actions/checkout@v3
-    - uses: messense/maturin-action@v1
+    - uses: actions/checkout@v4
+    - uses: PyO3/maturin-action@v1
       with:
         manylinux: auto
         target: ${{ matrix.target }}
@@ -42,40 +42,40 @@ jobs:
         rust-toolchain: stable
         args: --release --sdist -o dist --find-interpreter
     - name: Upload wheels
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
-        name: wheels
-        path: dist
+        name: wheels-linux-${{ matrix.target }}
+        path: dist/*.whl
 
   windows:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v3
-    - uses: messense/maturin-action@v1
+    - uses: actions/checkout@v4
+    - uses: PyO3/maturin-action@v1
       with:
         command: build
         rust-toolchain: stable
         args: --release -o dist --find-interpreter
     - name: Upload wheels
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
-        name: wheels
-        path: dist
+        name: wheels-windows
+        path: dist/*.whl
 
   macos:
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v3
-    - uses: messense/maturin-action@v1
+    - uses: actions/checkout@v4
+    - uses: PyO3/maturin-action@v1
       with:
         command: build
         rust-toolchain: stable
         args: --release -o dist --find-interpreter
     - name: Upload wheels
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
-        name: wheels
-        path: dist
+        name: wheels-macos
+        path: dist/*.whl
 
   release:
     name: Release
@@ -85,9 +85,12 @@ jobs:
     steps:
       - uses: actions/download-artifact@v2
         with:
-          name: wheels
+          name: wheels-*
+          path: dist
+          merge-multiple: true
+
       - name: Publish to PyPI
-        uses: messense/maturin-action@v1
+        uses: PyO3/maturin-action@v1
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         with:
@@ -102,10 +105,10 @@ jobs:
       matrix:
         python-version: ['3.8', '3.10', '3.x']
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -145,10 +148,10 @@ jobs:
     name: Documentation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.x'
           cache: 'pip'
@@ -199,9 +202,9 @@ jobs:
       name: Flake8
       runs-on: ubuntu-latest
       steps:
-      -   uses: actions/checkout@v3
+      -   uses: actions/checkout@v4
       -
-          uses: actions/setup-python@v4
+          uses: actions/setup-python@v5
           with:
               # matches compat target in pyproject.toml
               python-version: '3.8'
