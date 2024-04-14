@@ -189,6 +189,7 @@ jobs:
                 IdentitiesOnly yes
                 Hostname marten.tiker.net
                 StrictHostKeyChecking false
+                Port 2222
             END
 
                 echo "${DOC_UPLOAD_KEY}" > doc_upload_key
