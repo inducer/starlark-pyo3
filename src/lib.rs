@@ -460,7 +460,7 @@ fn parse(filename: &str, content: &str, dialect_opt: Option<Dialect>) -> PyResul
 /// .. automethod:: lint
 #[pymethods]
 impl AstModule {
-    #[pyo3(text_signature = "(self) -> list[Lint]")]
+    #[pyo3(text_signature = "() -> list[Lint]")]
     fn lint(&self) -> Vec<Lint> {
         self.0.lint(None).map(|lint| Lint {
             location: lint.location.dupe(),
@@ -592,7 +592,7 @@ impl Globals {
     }
 
     #[staticmethod]
-    #[pyo3(text_signature = "() -> Globals")]
+    #[pyo3(text_signature = "(extensions: list[LibraryExtension]) -> Globals")]
     fn extended_by(extensions: Vec<LibraryExtension>) -> PyResult<Globals> {
         let exts: Vec<starlark::environment::LibraryExtension> =
             extensions.iter().map(|ext| ext.0).collect();
@@ -671,7 +671,7 @@ impl Module {
         Ok(())
     }
 
-    #[pyo3(text_signature = "(self, name: str, callable: Callable) -> None")]
+    #[pyo3(text_signature = "(name: str, callable: Callable) -> None")]
     fn add_callable(&self, name: &str, callable: PyObject) {
         let b = self
             .0
@@ -680,7 +680,7 @@ impl Module {
         self.0.set(name, b);
     }
 
-    #[pyo3(text_signature = "(self) -> FrozenModule")]
+    #[pyo3(text_signature = "() -> FrozenModule")]
     fn freeze(mod_cell: &PyCell<Module>) -> PyResult<FrozenModule> {
         let module = mod_cell
             .replace(Module(starlark::environment::Module::new()))
