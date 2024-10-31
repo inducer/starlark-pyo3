@@ -157,6 +157,7 @@ impl ResolvedPos {
     fn line(&self) -> usize {
         self.0.line
     }
+    #[getter]
     fn column(&self) -> usize {
         self.0.column
     }
@@ -181,6 +182,7 @@ impl ResolvedSpan {
     fn begin(&self) -> ResolvedPos {
         ResolvedPos(self.0.begin)
     }
+    #[getter]
     fn end(&self) -> ResolvedPos {
         ResolvedPos(self.0.end)
     }
