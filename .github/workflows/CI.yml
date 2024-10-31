@@ -136,6 +136,9 @@ jobs:
 
       - name: Run tests
         run: pytest --tb=native test
+      
+      - name: Validate stubs
+        run: python -m mypy.stubtest --ignore-missing-stub starlark
 
       - name: Run example
         run: |
