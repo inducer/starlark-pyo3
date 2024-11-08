@@ -1,5 +1,6 @@
 import starlark as sl
 
+
 A_STAR = """
 load("zz.star", "zz")
 z = 3
@@ -25,7 +26,7 @@ mod["a"] = 5
 
 def g(x):
     print(f"g called with {x}")
-    return 2*x
+    return 2 * x
 
 
 mod.add_callable("g", g)

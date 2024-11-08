@@ -42,7 +42,7 @@ def test_python_callable():
     mod["a"] = 5
 
     def g(x):
-        return 2*x
+        return 2 * x
 
     mod.add_callable("g", g)
 

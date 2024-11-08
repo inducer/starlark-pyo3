@@ -1,5 +1,6 @@
 import starlark as sl
 
+
 # Two ways to execute a denial of service attack against the interpreter.
 
 A_STAR = """

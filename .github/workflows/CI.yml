@@ -202,17 +202,16 @@ jobs:
         env:
             DOC_UPLOAD_KEY: ${{ secrets.DOC_UPLOAD_KEY }}
 
-  flake8:
-      name: Flake8
+  ruff:
+      name: Ruff
       runs-on: ubuntu-latest
       steps:
       -   uses: actions/checkout@v4
       -
           uses: actions/setup-python@v5
           with:
-              # matches compat target in pyproject.toml
-              python-version: '3.8'
+              python-version: '3.x'
       -   name: "Main Script"
           run: |
-              curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-flake8.sh
-              . ./prepare-and-run-flake8.sh test examples
+              pip install ruff
+              ruff check
