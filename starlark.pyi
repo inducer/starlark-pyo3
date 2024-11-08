@@ -1,4 +1,4 @@
-from typing import Any, Callable, Optional, final
+from typing import Any, Callable, final
 
 @final
 class ResolvedPos:
@@ -50,9 +50,9 @@ class Dialect:
     enable_f_strings: bool
 
     @staticmethod
-    def standard() -> "Dialect": ...
+    def standard() -> Dialect: ...
     @staticmethod
-    def extended() -> "Dialect": ...
+    def extended() -> Dialect: ...
 
 @final
 class AstModule:
@@ -79,9 +79,9 @@ class LibraryExtension:
 @final
 class Globals:
     @staticmethod
-    def standard() -> "Globals": ...
+    def standard() -> Globals: ...
     @staticmethod
-    def extended_by(extensions: list[LibraryExtension]) -> "Globals": ...
+    def extended_by(extensions: list[LibraryExtension]) -> Globals: ...
 
 @final
 class FrozenModule: ...
@@ -98,11 +98,11 @@ class FileLoader:
     def __init__(self, load_func: Callable[[str], FrozenModule]) -> None: ...
 
 def parse(
-    filename: str, content: str, dialect: Optional[Dialect] = None
+    filename: str, content: str, dialect: Dialect | None = None
 ) -> AstModule: ...
 def eval(
     module: Module,
     ast: AstModule,
     globals: Globals,
-    file_loader: Optional[FileLoader] = None,
+    file_loader: FileLoader | None = None,
 ) -> object: ...

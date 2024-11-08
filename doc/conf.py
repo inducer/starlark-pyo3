@@ -1,5 +1,7 @@
 from urllib.request import urlopen
+
 import tomli
+
 
 _conf_url = (
     "https://raw.githubusercontent.com/inducer/sphinxconfig/main/sphinxconfig.py"
