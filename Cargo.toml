@@ -8,6 +8,7 @@ description = "Python bindings for starlark-rust"
 homepage = "https://github.com/inducer/starlark-pyo3"
 repository = "https://github.com/inducer/starlark-pyo3"
 readme = "README.rst"
+edition = "2021"
 
 exclude = [
         "dist/*",
