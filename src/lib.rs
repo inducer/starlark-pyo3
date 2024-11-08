@@ -97,14 +97,14 @@ fn serde_to_starlark<'v>(x: serde_json::Value, heap: &'v Heap) -> anyhow::Result
 fn value_to_pyobject(value: Value) -> PyResult<PyObject> {
     let json_val = convert_err(value.to_json())?;
     Python::with_gil(|py| {
-        let json = py.import("json")?;
+        let json = py.import_bound("json")?;
         json.getattr("loads")?.call1((json_val,))?.extract()
     })
 }
 
 fn pyobject_to_value<'v>(obj: PyObject, heap: &'v Heap) -> PyResult<Value<'v>> {
     Python::with_gil(|py| -> PyResult<Value<'v>> {
-        let json = py.import("json")?;
+        let json = py.import_bound("json")?;
         let json_str: String = json.getattr("dumps")?.call1((obj,))?.extract()?;
         convert_err(serde_to_starlark(
             convert_serde_err(serde_json::from_str(&json_str))?,
@@ -633,7 +633,7 @@ impl<'v> StarlarkValue<'v> for PythonCallableValue {
                 .map(|v| -> PyResult<PyObject> { value_to_pyobject(v) }))
             .collect::<PyResult<Vec<PyObject>>>()?;
             convert_to_anyhow(pyobject_to_value(
-                self.callable.call1(py, PyTuple::new(py, py_args))?,
+                self.callable.call1(py, PyTuple::new_bound(py, py_args))?,
                 eval.heap(),
             ))
         })
@@ -649,12 +649,12 @@ impl<'v> StarlarkValue<'v> for PythonCallableValue {
 /// .. automethod:: add_callable
 /// .. automethod:: freeze
 #[pyclass]
-#[pyo3(text_signature = "() -> None")]
 struct Module(starlark::environment::Module);
 
 #[pymethods]
 impl Module {
     #[new]
+    #[pyo3(text_signature = "() -> None")]
     fn py_new() -> PyResult<Module> {
         Ok(Module(starlark::environment::Module::new()))
     }
@@ -680,7 +680,6 @@ impl Module {
         self.0.set(name, b);
     }
 
-    #[pyo3(text_signature = "() -> FrozenModule")]
     fn freeze(mod_cell: &PyCell<Module>) -> PyResult<FrozenModule> {
         let module = mod_cell
             .replace(Module(starlark::environment::Module::new()))
@@ -701,7 +700,6 @@ struct FrozenModule(starlark::environment::FrozenModule);
 // {{{ FileLoader
 
 #[pyclass]
-#[pyo3(text_signature = "(load_func: Callable[[str], FrozenModule]) -> None")]
 struct FileLoader {
     callable: PyObject,
 }
@@ -709,6 +707,7 @@ struct FileLoader {
 #[pymethods]
 impl FileLoader {
     #[new]
+    #[pyo3(text_signature = "(load_func: Callable[[str], FrozenModule]) -> None")]
     fn py_new(callable: PyObject) -> FileLoader {
         FileLoader { callable: callable }
     }
@@ -755,7 +754,7 @@ fn eval(
     module: &mut Module,
     ast: &PyCell<AstModule>,
     globals: &Globals,
-    file_loader: Option<&PyCell<FileLoader>>,
+    file_loader: Option<&Bound<FileLoader>>,
 ) -> PyResult<PyObject> {
     let tail = |evaluator: &mut starlark::eval::Evaluator| {
         // Stupid: eval_module consumes the AST.
@@ -783,7 +782,7 @@ fn eval(
 
 #[pymodule]
 #[pyo3(name = "starlark")]
-fn starlark_py(_py: Python, m: &PyModule) -> PyResult<()> {
+fn starlark_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ResolvedPos>()?;
     m.add_class::<ResolvedSpan>()?;
     m.add_class::<ResolvedFileSpan>()?;
@@ -799,7 +798,7 @@ fn starlark_py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<FileLoader>()?;
     m.add_wrapped(wrap_pyfunction!(parse))?;
     m.add_wrapped(wrap_pyfunction!(eval))?;
-    m.add("StarlarkError", _py.get_type::<StarlarkError>())?;
+    m.add("StarlarkError", m.py().get_type_bound::<StarlarkError>())?;
 
     Ok(())
 }
