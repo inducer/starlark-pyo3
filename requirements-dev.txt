@@ -1,5 +1,6 @@
 maturin
 pytest
+mypy
 
 sphinx
 sphinx-copybutton
