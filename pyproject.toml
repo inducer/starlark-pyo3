@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "starlark-pyo3"
-version = "2024.1.3"
+version = "2024.1.4"
 description = "Wraps starlark-rust into Python"
 requires-python = ">=3.9"
 license = {file = "LICENSE"}
