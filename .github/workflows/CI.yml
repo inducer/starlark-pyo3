@@ -26,7 +26,7 @@ jobs:
       with:
         name: wheels-linux
         path: dist/*
-  
+
   linux-cross:
     runs-on: ubuntu-latest
     strategy:
@@ -136,7 +136,7 @@ jobs:
 
       - name: Run tests
         run: pytest --tb=native test
-      
+
       - name: Validate stubs
         run: python -m mypy.stubtest --allowlist stubtest-allowlist.txt starlark
 
