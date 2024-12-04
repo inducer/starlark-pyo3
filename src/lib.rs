@@ -443,10 +443,10 @@ struct AstModule(starlark::syntax::AstModule);
 /// Parse Starlark source code as a string and return an AST.
 #[pyfunction]
 #[pyo3(
-    text_signature = "(filename: str, content: str, dialect: Optional[Dialect] = None) -> AstModule"
+    signature = (filename, content, dialect=None)
 )]
-fn parse(filename: &str, content: &str, dialect_opt: Option<Dialect>) -> PyResult<AstModule> {
-    let dialect = match dialect_opt {
+fn parse(filename: &str, content: &str, dialect: Option<Dialect>) -> PyResult<AstModule> {
+    let dialect = match dialect {
         Some(dialect) => dialect.0,
         None => starlark::syntax::Dialect::Standard,
     };
@@ -680,10 +680,12 @@ impl Module {
         self.0.set(name, b);
     }
 
-    fn freeze(mod_cell: &PyCell<Module>) -> PyResult<FrozenModule> {
-        let module = mod_cell
-            .replace(Module(starlark::environment::Module::new()))
-            .0;
+    fn freeze(mod_cell: &Bound<Module>) -> PyResult<FrozenModule> {
+        let module = std::mem::replace(
+            &mut *mod_cell.borrow_mut(),
+            Module(starlark::environment::Module::new()),
+        )
+        .0;
         Ok(FrozenModule(convert_err(module.freeze())?))
     }
 }
@@ -748,20 +750,21 @@ fn empty_ast() -> AstModule {
 /// :returns: the value returned by the evaluation, after :ref:`object-conversion`.
 #[pyfunction]
 #[pyo3(
-    text_signature = "(module: Module, ast: AstModule, globals: Globals, file_loader: Optional[FileLoader]) -> object"
+    signature = (module, ast, globals, file_loader=None)
 )]
 fn eval(
     module: &mut Module,
-    ast: &PyCell<AstModule>,
+    ast: &Bound<AstModule>,
     globals: &Globals,
     file_loader: Option<&Bound<FileLoader>>,
 ) -> PyResult<PyObject> {
     let tail = |evaluator: &mut starlark::eval::Evaluator| {
         // Stupid: eval_module consumes the AST.
         // Python would like it to live on,  but starlark-rust says no.
-        value_to_pyobject(convert_err(
-            evaluator.eval_module(ast.replace(empty_ast()).0, &globals.0),
-        )?)
+        value_to_pyobject(convert_err(evaluator.eval_module(
+            std::mem::replace(&mut *ast.borrow_mut(), empty_ast()).0,
+            &globals.0,
+        ))?)
     };
 
     match file_loader {

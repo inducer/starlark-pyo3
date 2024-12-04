@@ -22,7 +22,7 @@ name = "starlark"
 starlark = "^0.10.0"
 starlark_derive = "^0.10.0"
 anyhow = "^1.0.65"
-pyo3 = { version = "0.21.2", features = ["extension-module"] }
+pyo3 = { version = "0.22.6", features = ["extension-module"] }
 
 # needed to resolve contradictory constraints in dependencies
 syn = "^1.0.96"
