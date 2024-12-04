@@ -37,7 +37,7 @@ use gazebo::prelude::*;
 use crate::starlark::collections::SmallMap;
 use allocative::Allocative;
 use dupe::Dupe;
-use pyo3::types::PyTuple;
+use pyo3::types::{PyDict, PyTuple};
 use starlark::analysis::AstModuleLint;
 use starlark::eval::Arguments;
 use starlark::starlark_simple_value;
@@ -627,15 +627,28 @@ impl<'v> StarlarkValue<'v> for PythonCallableValue {
         eval: &mut starlark::eval::Evaluator<'v, '_>,
     ) -> starlark::Result<Value<'v>> {
         Python::with_gil(|py| -> starlark::Result<Value<'v>> {
-            args.no_named_args()?;
+            // Handle positional arguments
             let py_args: Vec<PyObject> = convert_to_starlark_err(
                 (args
                     .positions(eval.heap())?
                     .map(|v| -> PyResult<PyObject> { value_to_pyobject(v) }))
                 .collect::<PyResult<Vec<PyObject>>>(),
             )?;
+
+            // Handle named arguments.
+            let py_kwargs = PyDict::new_bound(py);
+            for name in args.names_map()?.iter() {
+                let key = name.0.as_str();
+                let val = convert_to_starlark_err(value_to_pyobject(*name.1))?;
+                convert_to_starlark_err(py_kwargs.set_item(key, val))?;
+            }
+
             convert_to_starlark_err(pyobject_to_value(
-                convert_to_starlark_err(self.callable.call1(py, PyTuple::new_bound(py, py_args)))?,
+                convert_to_starlark_err(self.callable.call_bound(
+                    py,
+                    PyTuple::new_bound(py, py_args),
+                    Some(&py_kwargs),
+                ))?,
                 eval.heap(),
             ))
         })
