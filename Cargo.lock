@@ -14,13 +14,14 @@ dependencies = [
 
 [[package]]
 name = "ahash"
-version = "0.7.7"
+version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a824f2aa7e75a0c98c5a504fceb80649e9c35265d44525b5f94de4771a395cd"
+checksum = "e89da841a80418a9b391ebaea17f5c112ffaaa96f621d2c285b5174da76b9011"
 dependencies = [
- "getrandom",
+ "cfg-if",
  "once_cell",
  "version_check",
+ "zerocopy",
 ]
 
 [[package]]
@@ -34,27 +35,33 @@ dependencies = [
 
 [[package]]
 name = "allocative"
-version = "0.3.1"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38d7346fefe76a2adfb9729f00e3a6f0992480d20a6c2df5ba36dc24262b4998"
+checksum = "082af274fd02beef17b7f0725a49ecafe6c075ef56cac9d6363eb3916a9817ae"
 dependencies = [
  "allocative_derive",
  "bumpalo",
  "ctor",
- "hashbrown 0.12.3",
+ "hashbrown",
  "num-bigint",
 ]
 
 [[package]]
 name = "allocative_derive"
-version = "0.3.1"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e21abe3434e1b78feb5fe14d30bf3fcfa0a3c599f0b8fb381302ee6f68eb5716"
+checksum = "fe233a377643e0fc1a56421d7c90acdec45c291b30345eb9f08e8d0ddce5a4ab"
 dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.87",
 ]
+
+[[package]]
+name = "allocator-api2"
+version = "0.2.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "annotate-snippets"
@@ -124,6 +131,12 @@ name = "bumpalo"
 version = "3.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f30e7476521f6f8af1a1c4c0b8cc94f0bee37d91763d0ca2665f299b6cd8aec"
+
+[[package]]
+name = "byteorder"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "cfg-if"
@@ -319,16 +332,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fancy-regex"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0678ab2d46fa5195aaf59ad034c083d351377d4af57f3e073c074d0da3e3c766"
-dependencies = [
- "bit-set",
- "regex",
-]
-
-[[package]]
 name = "fd-lock"
 version = "3.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -358,6 +361,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13624c2627564efccf4934284bdd98cbaa14e79b0b5a141218e507b3a823456"
 dependencies = [
  "percent-encoding",
+]
+
+[[package]]
+name = "fxhash"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
+dependencies = [
+ "byteorder",
 ]
 
 [[package]]
@@ -393,18 +405,13 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
-dependencies = [
- "ahash",
-]
-
-[[package]]
-name = "hashbrown"
 version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "290f1a1d9242c78d09ce40a5e87e7554ee637af1351968159f4952f028f75604"
+dependencies = [
+ "ahash",
+ "allocator-api2",
+]
 
 [[package]]
 name = "heck"
@@ -441,7 +448,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d530e1a18b1cb4c484e6e34556a0d948706958449fca0cab753d649f2bce3d1f"
 dependencies = [
  "equivalent",
- "hashbrown 0.14.3",
+ "hashbrown",
 ]
 
 [[package]]
@@ -1065,9 +1072,9 @@ checksum = "4dccd0940a2dcdf68d092b8cbab7dc0ad8fa938bf95787e1b916b0e3d0e8e970"
 
 [[package]]
 name = "starlark"
-version = "0.10.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a06c0ca1e553a2908f48797a733ddbc6769854005d9035565ff3e19b85ad3877"
+checksum = "419b088f6fe8393b8b2525d57f32e240ff07ab49e39f0afe3c8a5372bb94a823"
 dependencies = [
  "allocative",
  "anyhow",
@@ -1080,8 +1087,7 @@ dependencies = [
  "dupe",
  "either",
  "erased-serde",
- "fancy-regex",
- "hashbrown 0.12.3",
+ "hashbrown",
  "inventory",
  "itertools",
  "maplit",
@@ -1094,7 +1100,7 @@ dependencies = [
  "rustyline",
  "serde",
  "serde_json",
- "starlark_derive",
+ "starlark_derive 0.12.0",
  "starlark_map",
  "starlark_syntax",
  "static_assertions",
@@ -1116,7 +1122,7 @@ dependencies = [
  "pyo3",
  "serde_json",
  "starlark",
- "starlark_derive",
+ "starlark_derive 0.10.0",
  "syn 1.0.109",
  "thiserror",
 ]
@@ -1134,24 +1140,36 @@ dependencies = [
 ]
 
 [[package]]
-name = "starlark_map"
-version = "0.10.0"
+name = "starlark_derive"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0708516dd469849751f49c0a9c2c7db8eda8553d5313c4f665b2810c7eb0603"
+checksum = "ee8407ca86174f600acfc8b7e0576058bb866a19521b92f9590fa2bcf1c8c807"
+dependencies = [
+ "dupe",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.87",
+]
+
+[[package]]
+name = "starlark_map"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e03678553f5f0ce473a7a9064fc7bf2c1fa5013eb605c95d09896e3eacbacc5"
 dependencies = [
  "allocative",
  "dupe",
  "equivalent",
- "fnv",
- "hashbrown 0.12.3",
+ "fxhash",
+ "hashbrown",
  "serde",
 ]
 
 [[package]]
 name = "starlark_syntax"
-version = "0.10.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5c9476e3a6cfda9cc965329a77d5a6f73c1e3134abe04747b5d5077695fc94b"
+checksum = "6ae4c126dbc9702fae89fb2460f06b0f562e7de1351ab545591a27e9528afa2f"
 dependencies = [
  "allocative",
  "annotate-snippets",
@@ -1522,3 +1540,23 @@ name = "windows_x86_64_msvc"
 version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dff9641d1cd4be8d1a070daf9e3773c5f67e78b4d9d42263020c057706765c04"
+
+[[package]]
+name = "zerocopy"
+version = "0.7.35"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b9b4fd18abc82b8136838da5d50bae7bdea537c574d8dc1a34ed098d6c166f0"
+dependencies = [
+ "zerocopy-derive",
+]
+
+[[package]]
+name = "zerocopy-derive"
+version = "0.7.35"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa4f8080344d4671fb4e831a13ad1e68092748387dfc4f55e356242fae12ce3e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.87",
+]

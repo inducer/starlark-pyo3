@@ -95,7 +95,7 @@ fn serde_to_starlark<'v>(x: serde_json::Value, heap: &'v Heap) -> anyhow::Result
 // }}}
 
 fn value_to_pyobject(value: Value) -> PyResult<PyObject> {
-    let json_val = convert_err(value.to_json())?;
+    let json_val = convert_anyhow_err(value.to_json())?;
     Python::with_gil(|py| {
         let json = py.import_bound("json")?;
         json.getattr("loads")?.call1((json_val,))?.extract()
@@ -106,7 +106,7 @@ fn pyobject_to_value<'v>(obj: PyObject, heap: &'v Heap) -> PyResult<Value<'v>> {
     Python::with_gil(|py| -> PyResult<Value<'v>> {
         let json = py.import_bound("json")?;
         let json_str: String = json.getattr("dumps")?.call1((obj,))?.extract()?;
-        convert_err(serde_to_starlark(
+        convert_anyhow_err(serde_to_starlark(
             convert_serde_err(serde_json::from_str(&json_str))?,
             heap,
         ))
@@ -117,7 +117,14 @@ fn pyobject_to_value<'v>(obj: PyObject, heap: &'v Heap) -> PyResult<Value<'v>> {
 
 // {{{ result conversions
 
-fn convert_err<T>(err: Result<T, anyhow::Error>) -> Result<T, PyErr> {
+fn convert_anyhow_err<T>(err: Result<T, anyhow::Error>) -> Result<T, PyErr> {
+    match err {
+        Ok(t) => Ok(t),
+        Err(e) => Err(StarlarkError::new_err(e.to_string())),
+    }
+}
+
+fn convert_starlark_err<T>(err: starlark::Result<T>) -> Result<T, PyErr> {
     match err {
         Ok(t) => Ok(t),
         Err(e) => Err(StarlarkError::new_err(e.to_string())),
@@ -131,10 +138,10 @@ fn convert_serde_err<T>(err: Result<T, serde_json::Error>) -> Result<T, PyErr> {
     }
 }
 
-fn convert_to_anyhow<T>(err: Result<T, PyErr>) -> Result<T, anyhow::Error> {
+fn convert_to_starlark_err<T>(err: Result<T, PyErr>) -> Result<T, starlark::Error> {
     match err {
         Ok(t) => Ok(t),
-        Err(e) => Err(anyhow::Error::new(e)),
+        Err(e) => Err(starlark::Error::new_other(e)),
     }
 }
 
@@ -450,11 +457,9 @@ fn parse(filename: &str, content: &str, dialect: Option<Dialect>) -> PyResult<As
         Some(dialect) => dialect.0,
         None => starlark::syntax::Dialect::Standard,
     };
-    Ok(AstModule(convert_err(starlark::syntax::AstModule::parse(
-        filename,
-        content.to_string(),
-        &dialect,
-    ))?))
+    Ok(AstModule(convert_starlark_err(
+        starlark::syntax::AstModule::parse(filename, content.to_string(), &dialect),
+    )?))
 }
 
 /// .. automethod:: lint
@@ -526,11 +531,6 @@ impl LibraryExtension {
     #[allow(non_snake_case)]
     fn Partial() -> Self {
         LibraryExtension(starlark::environment::LibraryExtension::Partial)
-    }
-    #[classattr]
-    #[allow(non_snake_case)]
-    fn ExperimentalRegex() -> Self {
-        LibraryExtension(starlark::environment::LibraryExtension::ExperimentalRegex)
     }
     #[classattr]
     #[allow(non_snake_case)]
@@ -625,15 +625,17 @@ impl<'v> StarlarkValue<'v> for PythonCallableValue {
         _me: Value<'v>,
         args: &Arguments<'v, '_>,
         eval: &mut starlark::eval::Evaluator<'v, '_>,
-    ) -> anyhow::Result<Value<'v>> {
-        Python::with_gil(|py| -> anyhow::Result<Value<'v>> {
+    ) -> starlark::Result<Value<'v>> {
+        Python::with_gil(|py| -> starlark::Result<Value<'v>> {
             args.no_named_args()?;
-            let py_args: Vec<PyObject> = (args
-                .positions(eval.heap())?
-                .map(|v| -> PyResult<PyObject> { value_to_pyobject(v) }))
-            .collect::<PyResult<Vec<PyObject>>>()?;
-            convert_to_anyhow(pyobject_to_value(
-                self.callable.call1(py, PyTuple::new_bound(py, py_args))?,
+            let py_args: Vec<PyObject> = convert_to_starlark_err(
+                (args
+                    .positions(eval.heap())?
+                    .map(|v| -> PyResult<PyObject> { value_to_pyobject(v) }))
+                .collect::<PyResult<Vec<PyObject>>>(),
+            )?;
+            convert_to_starlark_err(pyobject_to_value(
+                convert_to_starlark_err(self.callable.call1(py, PyTuple::new_bound(py, py_args)))?,
                 eval.heap(),
             ))
         })
@@ -686,7 +688,7 @@ impl Module {
             Module(starlark::environment::Module::new()),
         )
         .0;
-        Ok(FrozenModule(convert_err(module.freeze())?))
+        Ok(FrozenModule(convert_anyhow_err(module.freeze())?))
     }
 }
 
@@ -761,7 +763,7 @@ fn eval(
     let tail = |evaluator: &mut starlark::eval::Evaluator| {
         // Stupid: eval_module consumes the AST.
         // Python would like it to live on,  but starlark-rust says no.
-        value_to_pyobject(convert_err(evaluator.eval_module(
+        value_to_pyobject(convert_starlark_err(evaluator.eval_module(
             std::mem::replace(&mut *ast.borrow_mut(), empty_ast()).0,
             &globals.0,
         ))?)
