@@ -1,4 +1,24 @@
+from collections.abc import Sequence
 from typing import Any, Callable, final
+
+__all__: Sequence[str] = [
+    "AstModule",
+    "Dialect",
+    "DialectTypes",
+    "EvalSeverity",
+    "FileLoader",
+    "FrozenModule",
+    "Globals",
+    "LibraryExtension",
+    "Lint",
+    "Module",
+    "ResolvedFileSpan",
+    "ResolvedPos",
+    "ResolvedSpan",
+    "StarlarkError",
+    "eval",
+    "parse",
+]
 
 @final
 class ResolvedPos:
@@ -96,9 +116,7 @@ class Module:
 class FileLoader:
     def __init__(self, load_func: Callable[[str], FrozenModule]) -> None: ...
 
-def parse(
-    filename: str, content: str, dialect: Dialect | None = None
-) -> AstModule: ...
+def parse(filename: str, content: str, dialect: Dialect | None = None) -> AstModule: ...
 def eval(
     module: Module,
     ast: AstModule,
