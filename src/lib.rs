@@ -27,6 +27,7 @@ extern crate starlark_derive;
 extern crate thiserror;
 
 use std::fmt::{self, Display};
+use std::sync::Mutex;
 
 use crate::pyo3::create_exception;
 use crate::pyo3::exceptions::PyException;
@@ -37,6 +38,7 @@ use gazebo::prelude::*;
 use crate::starlark::collections::SmallMap;
 use allocative::Allocative;
 use dupe::Dupe;
+use pyo3::sync::MutexExt;
 use pyo3::types::{PyDict, PyTuple};
 use starlark::analysis::AstModuleLint;
 use starlark::eval::Arguments;
@@ -97,14 +99,14 @@ fn serde_to_starlark<'v>(x: serde_json::Value, heap: &'v Heap) -> anyhow::Result
 fn value_to_pyobject(value: Value) -> PyResult<PyObject> {
     let json_val = convert_anyhow_err(value.to_json())?;
     Python::with_gil(|py| {
-        let json = py.import_bound("json")?;
+        let json = py.import("json")?;
         json.getattr("loads")?.call1((json_val,))?.extract()
     })
 }
 
 fn pyobject_to_value<'v>(obj: PyObject, heap: &'v Heap) -> PyResult<Value<'v>> {
     Python::with_gil(|py| -> PyResult<Value<'v>> {
-        let json = py.import_bound("json")?;
+        let json = py.import("json")?;
         let json_str: String = json.getattr("dumps")?.call1((obj,))?.extract()?;
         convert_anyhow_err(serde_to_starlark(
             convert_serde_err(serde_json::from_str(&json_str))?,
@@ -636,7 +638,7 @@ impl<'v> StarlarkValue<'v> for PythonCallableValue {
             )?;
 
             // Handle named arguments.
-            let py_kwargs = PyDict::new_bound(py);
+            let py_kwargs = PyDict::new(py);
             for name in args.names_map()?.iter() {
                 let key = name.0.as_str();
                 let val = convert_to_starlark_err(value_to_pyobject(*name.1))?;
@@ -644,9 +646,9 @@ impl<'v> StarlarkValue<'v> for PythonCallableValue {
             }
 
             convert_to_starlark_err(pyobject_to_value(
-                convert_to_starlark_err(self.callable.call_bound(
+                convert_to_starlark_err(self.callable.call(
                     py,
-                    PyTuple::new_bound(py, py_args),
+                    convert_to_starlark_err(PyTuple::new(py, py_args))?,
                     Some(&py_kwargs),
                 ))?,
                 eval.heap(),
@@ -664,43 +666,42 @@ impl<'v> StarlarkValue<'v> for PythonCallableValue {
 /// .. automethod:: add_callable
 /// .. automethod:: freeze
 #[pyclass]
-struct Module(starlark::environment::Module);
+struct Module(Mutex<starlark::environment::Module>);
 
 #[pymethods]
 impl Module {
     #[new]
     #[pyo3(text_signature = "() -> None")]
     fn py_new() -> PyResult<Module> {
-        Ok(Module(starlark::environment::Module::new()))
+        Ok(Module(Mutex::new(starlark::environment::Module::new())))
     }
 
-    fn __getitem__(&self, name: &str) -> PyResult<PyObject> {
-        Python::with_gil(|py| match self.0.get(name) {
+    fn __getitem__(slf: &Bound<Self>, name: &str) -> PyResult<PyObject> {
+        Python::with_gil(|py| match slf.borrow().0.lock().unwrap().get(name) {
             Some(val) => Ok(value_to_pyobject(val)?),
             None => Ok(py.None()),
         })
     }
 
-    fn __setitem__(&self, name: &str, obj: PyObject) -> PyResult<()> {
-        self.0.set(name, pyobject_to_value(obj, self.0.heap())?);
+    fn __setitem__(slf: &Bound<Self>, name: &str, obj: PyObject) -> PyResult<()> {
+        let self_ref = slf.borrow();
+        let self_locked = self_ref.0.lock().unwrap();
+        self_locked.set(name, pyobject_to_value(obj, self_locked.heap())?);
         Ok(())
     }
 
     #[pyo3(text_signature = "(name: str, callable: Callable) -> None")]
-    fn add_callable(&self, name: &str, callable: PyObject) {
-        let b = self
-            .0
-            .heap()
-            .alloc(PythonCallableValue { callable: callable });
-        self.0.set(name, b);
+    fn add_callable(slf: &Bound<Self>, name: &str, callable: PyObject) {
+        let self_ref = slf.borrow();
+        let self_locked = self_ref.0.lock().unwrap();
+        let b = self_locked.heap().alloc(PythonCallableValue { callable });
+        self_locked.set(name, b);
     }
 
-    fn freeze(mod_cell: &Bound<Module>) -> PyResult<FrozenModule> {
-        let module = std::mem::replace(
-            &mut *mod_cell.borrow_mut(),
-            Module(starlark::environment::Module::new()),
-        )
-        .0;
+    fn freeze(slf: &Bound<Self>) -> PyResult<FrozenModule> {
+        let self_ref = slf.borrow_mut();
+        let mut self_locked = self_ref.0.lock().unwrap();
+        let module = std::mem::replace(&mut *self_locked, starlark::environment::Module::new());
         Ok(FrozenModule(convert_anyhow_err(module.freeze())?))
     }
 }
@@ -726,7 +727,7 @@ impl FileLoader {
     #[new]
     #[pyo3(text_signature = "(load_func: Callable[[str], FrozenModule]) -> None")]
     fn py_new(callable: PyObject) -> FileLoader {
-        FileLoader { callable: callable }
+        FileLoader { callable }
     }
 }
 
@@ -782,15 +783,16 @@ fn eval(
         ))?)
     };
 
+    let mod_locked = module.0.lock_py_attached(ast.py()).unwrap();
     match file_loader {
         Some(loader_cell) => {
             let loader_ref = loader_cell.borrow();
-            let mut evaluator = starlark::eval::Evaluator::new(&module.0);
+            let mut evaluator = starlark::eval::Evaluator::new(&mod_locked);
             evaluator.set_loader(&*loader_ref);
             tail(&mut evaluator)
         }
         None => {
-            let mut evaluator = starlark::eval::Evaluator::new(&module.0);
+            let mut evaluator = starlark::eval::Evaluator::new(&mod_locked);
             tail(&mut evaluator)
         }
     }
@@ -816,7 +818,7 @@ fn starlark_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<FileLoader>()?;
     m.add_wrapped(wrap_pyfunction!(parse))?;
     m.add_wrapped(wrap_pyfunction!(eval))?;
-    m.add("StarlarkError", m.py().get_type_bound::<StarlarkError>())?;
+    m.add("StarlarkError", m.py().get_type::<StarlarkError>())?;
 
     Ok(())
 }
