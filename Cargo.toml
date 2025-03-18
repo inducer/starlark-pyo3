@@ -19,8 +19,8 @@ crate-type = ["cdylib"]
 name = "starlark"
 
 [dependencies]
-starlark = "^0.12.0"
-starlark_derive = "^0.10.0"
+starlark = "^0.13.0"
+starlark_derive = "^0.13.0"
 anyhow = "^1.0.65"
 pyo3 = { version = "0.24", features = ["extension-module"] }
 
