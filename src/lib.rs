@@ -626,7 +626,7 @@ impl<'v> StarlarkValue<'v> for PythonCallableValue {
         &self,
         _me: Value<'v>,
         args: &Arguments<'v, '_>,
-        eval: &mut starlark::eval::Evaluator<'v, '_>,
+        eval: &mut starlark::eval::Evaluator<'v, '_, '_>,
     ) -> starlark::Result<Value<'v>> {
         Python::with_gil(|py| -> starlark::Result<Value<'v>> {
             // Handle positional arguments
