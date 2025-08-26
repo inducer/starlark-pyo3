@@ -45,7 +45,7 @@ use starlark::eval::Arguments;
 use starlark::starlark_simple_value;
 use starlark::values::dict::Dict;
 use starlark::values::list::AllocList;
-use starlark::values::{Heap, NoSerialize, ProvidesStaticType, StarlarkValue, Value};
+use starlark::values::{FreezeResult, Heap, NoSerialize, ProvidesStaticType, StarlarkValue, Value};
 use starlark_derive::starlark_value;
 use thiserror::Error;
 
@@ -63,7 +63,7 @@ enum JsonError {
     UnrepresentableNumber(String),
 }
 
-fn serde_to_starlark<'v>(x: serde_json::Value, heap: &'v Heap) -> anyhow::Result<Value<'v>> {
+fn serde_to_starlark(x: serde_json::Value, heap: &Heap) -> anyhow::Result<Value<'_>> {
     match x {
         serde_json::Value::Null => Ok(Value::new_none()),
         serde_json::Value::Bool(x) => Ok(Value::new_bool(x)),
@@ -130,6 +130,14 @@ fn convert_starlark_err<T>(err: starlark::Result<T>) -> Result<T, PyErr> {
     match err {
         Ok(t) => Ok(t),
         Err(e) => Err(StarlarkError::new_err(e.to_string())),
+    }
+}
+
+fn convert_freeze_err<T>(err: FreezeResult<T>) -> Result<T, PyErr> {
+    match err {
+        Ok(t) => Ok(t),
+        // FIXME: Could also format the additional contexts provided.
+        Err(e) => Err(StarlarkError::new_err(e.err_msg)),
     }
 }
 
@@ -626,7 +634,7 @@ impl<'v> StarlarkValue<'v> for PythonCallableValue {
         &self,
         _me: Value<'v>,
         args: &Arguments<'v, '_>,
-        eval: &mut starlark::eval::Evaluator<'v, '_>,
+        eval: &mut starlark::eval::Evaluator<'v, '_, '_>,
     ) -> starlark::Result<Value<'v>> {
         Python::with_gil(|py| -> starlark::Result<Value<'v>> {
             // Handle positional arguments
@@ -668,6 +676,15 @@ impl<'v> StarlarkValue<'v> for PythonCallableValue {
 #[pyclass]
 struct Module(Mutex<starlark::environment::Module>);
 
+// Rust infers that Module is not Send because Module contains 'extra_value',
+// which is a Value, and this change prevents Values from ever being Send:
+// https://github.com/facebook/starlark-rust/commit/6af7319980c5f4227b5642a49c4c520e96b5c06a
+// In our case, extra_value isn't used, so here we go pretending to know better.
+// It will probably be useful to disable this on every update to starlark to
+// see if there are other reasons for Module to not be Send.
+unsafe impl Send for Module {}
+unsafe impl Sync for Module {}
+
 #[pymethods]
 impl Module {
     #[new]
@@ -702,7 +719,7 @@ impl Module {
         let self_ref = slf.borrow_mut();
         let mut self_locked = self_ref.0.lock().unwrap();
         let module = std::mem::replace(&mut *self_locked, starlark::environment::Module::new());
-        Ok(FrozenModule(convert_anyhow_err(module.freeze())?))
+        Ok(FrozenModule(convert_freeze_err(module.freeze())?))
     }
 }
 
@@ -732,11 +749,13 @@ impl FileLoader {
 }
 
 impl starlark::eval::FileLoader for FileLoader {
-    fn load(&self, path: &str) -> anyhow::Result<starlark::environment::FrozenModule> {
+    fn load(&self, path: &str) -> starlark::Result<starlark::environment::FrozenModule> {
         Python::with_gil(
-            |py| -> anyhow::Result<starlark::environment::FrozenModule> {
-                let fmod: Py<FrozenModule> =
-                    self.callable.call1(py, (path.to_string(),))?.extract(py)?;
+            |py| -> starlark::Result<starlark::environment::FrozenModule> {
+                let fmod: Py<FrozenModule> = convert_to_starlark_err(
+                    convert_to_starlark_err(self.callable.call1(py, (path.to_string(),)))?
+                        .extract(py),
+                )?;
                 // FIXME: Can this be done without cloning the module?
                 let fmod_clone = fmod.borrow(py).0.clone();
                 Ok(fmod_clone)
