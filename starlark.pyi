@@ -1,7 +1,8 @@
-from collections.abc import Sequence
-from typing import Any, Callable, final
+from collections.abc import Mapping, Sequence
+from typing import Callable, final
 
 __all__: Sequence[str] = [
+    "AstLoad",
     "AstModule",
     "Dialect",
     "DialectTypes",
@@ -75,8 +76,14 @@ class Dialect:
     def extended() -> Dialect: ...
 
 @final
+class AstLoad:
+    module_id: str
+    symbols: Mapping[str, str]
+
+@final
 class AstModule:
-    def lint(self) -> list[Lint]: ...
+    def lint(self) -> Sequence[Lint]: ...
+    def loads(self) -> Sequence[AstLoad]: ...
 
 @final
 class LibraryExtension:
@@ -107,9 +114,9 @@ class FrozenModule: ...
 
 @final
 class Module:
-    def __getitem__(self, key: str, /) -> Any: ...
-    def __setitem__(self, key: str, value: Any, /) -> None: ...
-    def add_callable(self, name: str, callable: Callable) -> None: ...
+    def __getitem__(self, key: str, /) -> object: ...
+    def __setitem__(self, key: str, value: object, /) -> None: ...
+    def add_callable(self, name: str, callable: Callable[..., object]) -> None: ...
     def freeze(self) -> FrozenModule: ...
 
 @final

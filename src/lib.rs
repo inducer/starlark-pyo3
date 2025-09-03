@@ -26,6 +26,7 @@ extern crate starlark;
 extern crate starlark_derive;
 extern crate thiserror;
 
+use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::sync::Mutex;
 
@@ -448,12 +449,28 @@ impl Dialect {
 
 // }}}
 
+// {{{ AstLoad
+
+/// .. attribute:: module_id
+/// .. attribute:: symbols
+
+#[pyclass]
+struct AstLoad {
+    #[pyo3(get)]
+    pub module_id: String,
+    #[pyo3(get)]
+    pub symbols: HashMap<String, String>,
+}
+
+// }}}
+
 // {{{ AstModule
 
 /// See :func:`parse` to create objects of this type,
 /// and :func:`eval` to evaluate them.
 ///
 /// .. automethod:: lint
+/// .. automethod:: loads
 #[pyclass]
 struct AstModule(starlark::syntax::AstModule);
 
@@ -484,6 +501,24 @@ impl AstModule {
             problem: lint.problem.clone(),
             original: lint.original.clone(),
         })
+    }
+
+    #[pyo3(text_signature = "() -> list[AstLoad]")]
+    fn loads(&self) -> Vec<AstLoad> {
+        self.0
+            .loads()
+            .iter()
+            .map(|ld| -> AstLoad {
+                AstLoad {
+                    module_id: ld.module_id.to_string(),
+                    symbols: ld
+                        .symbols
+                        .iter()
+                        .map(|(imp_as, name)| (imp_as.to_string(), name.to_string()))
+                        .collect(),
+                }
+            })
+            .collect()
     }
 }
 
@@ -829,6 +864,7 @@ fn starlark_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Lint>()?;
     m.add_class::<DialectTypes>()?;
     m.add_class::<Dialect>()?;
+    m.add_class::<AstLoad>()?;
     m.add_class::<AstModule>()?;
     m.add_class::<LibraryExtension>()?;
     m.add_class::<Globals>()?;
