@@ -35,6 +35,7 @@ Dialect
 AST
 ---
 
+.. autoclass:: AstLoad
 .. autoclass:: AstModule
 
 Globals

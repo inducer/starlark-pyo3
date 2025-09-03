@@ -84,7 +84,7 @@ def test_module_loading():
     glb = sl.Globals.standard()
     mod = sl.Module()
 
-    def load(name):
+    def load(name: str):
         if name == "zz.star":
             ast = sl.parse(name, "zz = 15")
             mod = sl.Module()
@@ -94,6 +94,9 @@ def test_module_loading():
             raise FileNotFoundError(name)
 
     ast = sl.parse("loading.star", LOADING_STAR)
+    ld, = ast.loads()
+    assert ld.module_id == "zz.star"
+    assert ld.symbols == {"zz": "zz"}
 
     val = sl.eval(mod, ast, glb, sl.FileLoader(load))
 
