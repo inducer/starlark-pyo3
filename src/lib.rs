@@ -808,24 +808,11 @@ impl starlark::eval::FileLoader for FileLoader {
 
 // {{{ eval
 
-fn empty_ast() -> AstModule {
-    AstModule(
-        starlark::syntax::AstModule::parse(
-            "<empty>",
-            "".to_string(),
-            &starlark::syntax::Dialect::Standard,
-        )
-        .unwrap(),
-    )
-}
-
-/// Note that this *consumes* the *ast* argument, which is unusable after
-/// being passed to this fucntion.
-///
 /// :returns: the value returned by the evaluation, after :ref:`object-conversion`.
 #[pyfunction]
 #[pyo3(
-    signature = (module, ast, globals, file_loader=None)
+    signature = (module, ast, globals, file_loader=None),
+    text_signature = "(module: Module, ast: AstModule, globals: Globals, file_loader: FileLoader | None = None) -> object"
 )]
 fn eval(
     module: &mut Module,
@@ -834,12 +821,10 @@ fn eval(
     file_loader: Option<&Bound<FileLoader>>,
 ) -> PyResult<PyObject> {
     let tail = |evaluator: &mut starlark::eval::Evaluator| {
-        // Stupid: eval_module consumes the AST.
-        // Python would like it to live on,  but starlark-rust says no.
-        value_to_pyobject(convert_starlark_err(evaluator.eval_module(
-            std::mem::replace(&mut *ast.borrow_mut(), empty_ast()).0,
-            &globals.0,
-        ))?)
+        // Stupid: eval_module consumes the AST. Clone it.
+        value_to_pyobject(convert_starlark_err(
+            evaluator.eval_module(ast.borrow().0.clone(), &globals.0),
+        )?)
     };
 
     let mod_locked = module.0.lock_py_attached(ast.py()).unwrap();
