@@ -216,6 +216,7 @@ impl ResolvedSpan {
 /// .. autoattribute:: span
 ///
 ///     A :class:`ResolvedSpan`.
+/// .. automethod:: __str__
 #[pyclass]
 struct ResolvedFileSpan(starlark::codemap::ResolvedFileSpan);
 
@@ -228,6 +229,9 @@ impl ResolvedFileSpan {
     #[getter]
     fn span(&self) -> ResolvedSpan {
         ResolvedSpan(self.0.span)
+    }
+    fn __str__(&self) -> String {
+        format!("{}", self.0)
     }
 }
 

@@ -60,6 +60,9 @@ class ResolvedFileSpan:
     file: str
     span: ResolvedSpan
 
+    @override
+    def __str__(self) -> str: ...
+
 class StarlarkError(Exception): ...
 
 @final
