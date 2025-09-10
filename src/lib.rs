@@ -755,6 +755,7 @@ impl Module {
         self_locked.set(name, b);
     }
 
+    #[pyo3(text_signature = "() -> FrozenModule")]
     fn freeze(slf: &Bound<Self>) -> PyResult<FrozenModule> {
         let self_ref = slf.borrow_mut();
         let mut self_locked = self_ref.0.lock().unwrap();
