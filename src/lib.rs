@@ -481,7 +481,8 @@ struct AstModule(starlark::syntax::AstModule);
 /// Parse Starlark source code as a string and return an AST.
 #[pyfunction]
 #[pyo3(
-    signature = (filename, content, dialect=None)
+    signature = (filename, content, dialect=None),
+    text_signature = "(filename: str, content: str, dialect: Dialect | None = None) -> AstModule"
 )]
 fn parse(filename: &str, content: &str, dialect: Option<Dialect>) -> PyResult<AstModule> {
     let dialect = match dialect {
