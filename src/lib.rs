@@ -37,6 +37,7 @@ use crate::pyo3::prelude::*;
 use gazebo::prelude::*;
 
 use crate::starlark::collections::SmallMap;
+use crate::starlark::typing::AstModuleTypecheck;
 use allocative::Allocative;
 use dupe::Dupe;
 use pyo3::sync::MutexExt;
@@ -338,6 +339,29 @@ impl Lint {
 
 // }}}
 
+// {{{ Error
+
+/// .. attribute:: span: ResolvedFileSpan | None
+/// .. automethod:: __str__
+#[pyclass]
+struct Error(starlark::Error);
+
+#[pymethods]
+impl Error {
+    #[getter]
+    fn span(&self) -> Option<ResolvedFileSpan> {
+        match self.0.span() {
+            Some(span) => Some(ResolvedFileSpan(span.resolve())),
+            None => None,
+        }
+    }
+    fn __str__(&self) -> String {
+        self.0.to_string()
+    }
+}
+
+// }}}
+
 // {{{ DialectTypes
 
 /// .. attribute:: DISABLE
@@ -453,6 +477,17 @@ impl Dialect {
 
 // }}}
 
+// {{{ Interface
+
+/// Opaque for now.
+#[pyclass(frozen)]
+struct Interface(starlark::typing::Interface);
+
+#[pymethods]
+impl Interface {}
+
+// }}}
+
 // {{{ AstLoad
 
 /// .. attribute:: module_id
@@ -475,6 +510,7 @@ struct AstLoad {
 ///
 /// .. automethod:: lint
 /// .. automethod:: loads
+/// .. automethod:: typecheck
 #[pyclass]
 struct AstModule(starlark::syntax::AstModule);
 
@@ -524,6 +560,29 @@ impl AstModule {
                 }
             })
             .collect()
+    }
+
+    #[pyo3(
+        text_signature = "(globals: Globals, loads: dict[str, Interface]) -> tuple[list[Error], None, None]"
+    )]
+    fn typecheck<'py>(
+        slf: Bound<'py, AstModule>,
+        globals: &Globals,
+        py_loads: HashMap<String, Bound<'py, Interface>>,
+    ) -> (Vec<Error>, Interface, ()) {
+        // FIXME: Can we get by without cloning all the interfaces?
+        let loads: HashMap<String, starlark::typing::Interface> = py_loads
+            .iter()
+            .map(|(name, iface)| (name.clone(), iface.get().0.clone()))
+            .collect();
+        // FIXME: Can we make do without cloning the module?
+        let (mut errors, _typemap, iface, _approximations) =
+            slf.borrow().0.clone().typecheck(&globals.0, &loads);
+        (
+            errors.drain(..).map(|err| Error(err)).collect(),
+            Interface(iface),
+            (),
+        )
     }
 }
 
@@ -853,8 +912,10 @@ fn starlark_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ResolvedFileSpan>()?;
     m.add_class::<EvalSeverity>()?;
     m.add_class::<Lint>()?;
+    m.add_class::<Error>()?;
     m.add_class::<DialectTypes>()?;
     m.add_class::<Dialect>()?;
+    m.add_class::<Interface>()?;
     m.add_class::<AstLoad>()?;
     m.add_class::<AstModule>()?;
     m.add_class::<LibraryExtension>()?;

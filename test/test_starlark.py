@@ -102,6 +102,33 @@ def test_module_loading():
 
     assert val == 15
 
+
+TC_STAR = """
+def f(x: int) -> int:
+    return "x" * "x"  # FIXME: not an error?
+
+def test():
+    z = 0x60000000000000000000000 | 1.0
+
+def test2():
+    l = []
+    l.oppend(5)
+"""
+
+
+def test_type_check():
+    glb = sl.Globals.standard()
+    dialect = sl.Dialect.extended()
+    dialect.enable_types = sl.DialectTypes.ENABLE
+    ast = sl.parse("tc.star", TC_STAR, sl.Dialect.extended())
+
+    errs, _iface, _ = ast.typecheck(glb, {})
+    for err in errs:
+        print(err)
+        print(err.span)
+
+    assert len(errs) == 2
+
 # }}}
 
 
