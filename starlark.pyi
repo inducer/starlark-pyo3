@@ -23,17 +23,19 @@ THE SOFTWARE.
 """
 
 from collections.abc import Mapping, Sequence
-from typing import Callable, final
+from typing import Callable, final, override
 
 __all__: Sequence[str] = [
     "AstLoad",
     "AstModule",
     "Dialect",
     "DialectTypes",
+    "Error",
     "EvalSeverity",
     "FileLoader",
     "FrozenModule",
     "Globals",
+    "Interface",
     "LibraryExtension",
     "Lint",
     "Module",
@@ -81,6 +83,13 @@ class Lint:
     original: str
 
 @final
+class Error:
+    @property
+    def span(self) -> ResolvedFileSpan | None: ...
+    @override
+    def __str__(self) -> str: ...
+
+@final
 class DialectTypes:
     DISABLE: DialectTypes
     PARSE_ONLY: DialectTypes
@@ -103,6 +112,10 @@ class Dialect:
     def extended() -> Dialect: ...
 
 @final
+class Interface:
+    pass
+
+@final
 class AstLoad:
     module_id: str
     symbols: Mapping[str, str]
@@ -111,6 +124,11 @@ class AstLoad:
 class AstModule:
     def lint(self) -> Sequence[Lint]: ...
     def loads(self) -> Sequence[AstLoad]: ...
+    def typecheck(self,
+                globals: Globals,
+                loads: dict[str, Interface],
+            ) -> tuple[list[Error], None, None]:
+        ...
 
 @final
 class LibraryExtension:

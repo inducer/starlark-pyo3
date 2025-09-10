@@ -25,12 +25,18 @@ Diagnostics
 .. autoexception:: StarlarkError
 .. autoclass:: EvalSeverity
 .. autoclass:: Lint
+.. autoclass:: Error
 
 Dialect
 -------
 
 .. autoclass:: DialectTypes
 .. autoclass:: Dialect
+
+Type checking
+-------------
+
+.. autoclass:: Interface
 
 AST
 ---
