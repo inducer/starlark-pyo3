@@ -17,12 +17,12 @@ def f():
 def test_linter():
     ast = sl.parse("lint.star", LINT_STAR)
 
-    severities = {}
+    severities: dict[str, int] = {}
     for lnt in ast.lint():
         print(lnt.severity, lnt)
-        severities[repr(lnt.severity)] = severities.get(lnt.severity, 0) + 1
+        severities[repr(lnt.severity)] = severities.get(repr(lnt.severity), 0) + 1
 
-    assert severities == {"Warning": 1, "Disabled": 1}
+    assert severities == {"Warning": 1, "Disabled": 3}
 
 # }}}
 
@@ -88,7 +88,7 @@ def test_module_loading():
         if name == "zz.star":
             ast = sl.parse(name, "zz = 15")
             mod = sl.Module()
-            sl.eval(mod, ast, glb)
+            _ = sl.eval(mod, ast, glb)
             return mod.freeze()
         else:
             raise FileNotFoundError(name)
@@ -138,6 +138,6 @@ if __name__ == "__main__":
         exec(sys.argv[1])
     else:
         from pytest import main
-        main([__file__])
+        _ = main([__file__])
 
 # vim: foldmethod=marker

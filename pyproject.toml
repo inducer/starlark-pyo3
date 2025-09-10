@@ -16,6 +16,9 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
+dependencies = [
+    "typing-extensions>=4.5",
+]
 
 [project.urls]
 homepage = "https://github.com/inducer/starlark-pyo3"
@@ -50,3 +53,25 @@ known-local-folder = [
     "starlark",
 ]
 lines-after-imports = 2
+
+
+[tool.basedpyright]
+reportImplicitStringConcatenation = "none"
+reportUnnecessaryIsInstance = "none"
+reportUnusedCallResult = "none"
+reportExplicitAny = "none"
+reportUnreachable = "hint"
+
+exclude = [
+    "doc",
+    "build",
+    ".env",
+    "venv",
+]
+
+# This reports even cycles that are qualified by 'if TYPE_CHECKING'. Not what
+# we care about at this moment.
+# https://github.com/microsoft/pyright/issues/746
+reportImportCycles = "none"
+pythonVersion = "3.9"
+pythonPlatform = "All"

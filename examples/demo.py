@@ -34,7 +34,7 @@ mod.add_callable("g", g)
 ast = sl.parse("a.star", A_STAR)
 
 
-def load(name):
+def load(name: str):
     if name == "zz.star":
         ast = sl.parse(name, "zz = 15")
         mod = sl.Module()

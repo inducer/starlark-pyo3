@@ -23,7 +23,9 @@ THE SOFTWARE.
 """
 
 from collections.abc import Mapping, Sequence
-from typing import Callable, final, override
+from typing import Callable, final
+
+from typing_extensions import override
 
 __all__: Sequence[str] = [
     "AstLoad",
