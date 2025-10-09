@@ -112,7 +112,7 @@ def test():
 
 def test2():
     l = []
-    l.oppend(5)
+    l.oppend(5)  # spellchecker: disable-line
 """
 
 
