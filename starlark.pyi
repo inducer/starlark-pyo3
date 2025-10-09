@@ -76,6 +76,11 @@ class EvalSeverity:
     Advice: EvalSeverity
     Disabled: EvalSeverity
 
+    @override
+    def __str__(self) -> str: ...
+    @override
+    def __eq__(self, other: object) -> bool: ...
+
 @final
 class Lint:
     resolved_location: ResolvedFileSpan
