@@ -22,7 +22,8 @@ dependencies = [
 ]
 
 [project.urls]
-homepage = "https://github.com/inducer/starlark-pyo3"
+repository = "https://github.com/inducer/starlark-pyo3"
+documentation = "https://documen.tician.de/starlark-pyo3/"
 
 [tool.ruff]
 preview = true
