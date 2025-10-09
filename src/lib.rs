@@ -258,6 +258,9 @@ impl EvalSeverity {
             starlark::analysis::EvalSeverity::Disabled => "Disabled".to_string(),
         }
     }
+    fn __eq__(&self, other: EvalSeverity) -> bool {
+        return self.0 == other.0;
+    }
     fn __str__(&self) -> String {
         self.__repr__()
     }
