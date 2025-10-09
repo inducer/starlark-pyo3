@@ -6,6 +6,7 @@ build-backend = "maturin"
 name = "starlark-pyo3"
 version = "2025.2"
 description = "Wraps starlark-rust into Python"
+readme = "README.rst"
 requires-python = ">=3.9"
 license = {file = "LICENSE"}
 authors = [
