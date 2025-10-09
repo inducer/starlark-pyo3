@@ -120,7 +120,7 @@ def test_type_check():
     glb = sl.Globals.standard()
     dialect = sl.Dialect.extended()
     dialect.enable_types = sl.DialectTypes.ENABLE
-    ast = sl.parse("tc.star", TC_STAR, sl.Dialect.extended())
+    ast = sl.parse("tc.star", TC_STAR, dialect)
 
     errs, _iface, _ = ast.typecheck(glb, {})
     for err in errs:
