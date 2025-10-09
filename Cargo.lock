@@ -36,7 +36,7 @@ dependencies = [
 [[package]]
 name = "allocative"
 version = "0.3.4"
-source = "git+https://github.com/facebook/starlark-rust?rev=f0a4a7e03eef100b0c539806347aa3a481abc7ac#f0a4a7e03eef100b0c539806347aa3a481abc7ac"
+source = "git+https://github.com/facebook/starlark-rust?rev=db3b090a19f6134f2a79a727f70d80f68f8f7dc6#db3b090a19f6134f2a79a727f70d80f68f8f7dc6"
 dependencies = [
  "allocative_derive",
  "bumpalo",
@@ -48,7 +48,7 @@ dependencies = [
 [[package]]
 name = "allocative_derive"
 version = "0.3.3"
-source = "git+https://github.com/facebook/starlark-rust?rev=f0a4a7e03eef100b0c539806347aa3a481abc7ac#f0a4a7e03eef100b0c539806347aa3a481abc7ac"
+source = "git+https://github.com/facebook/starlark-rust?rev=db3b090a19f6134f2a79a727f70d80f68f8f7dc6#db3b090a19f6134f2a79a727f70d80f68f8f7dc6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -160,7 +160,7 @@ dependencies = [
 [[package]]
 name = "cmp_any"
 version = "0.8.1"
-source = "git+https://github.com/facebook/starlark-rust?rev=f0a4a7e03eef100b0c539806347aa3a481abc7ac#f0a4a7e03eef100b0c539806347aa3a481abc7ac"
+source = "git+https://github.com/facebook/starlark-rust?rev=db3b090a19f6134f2a79a727f70d80f68f8f7dc6#db3b090a19f6134f2a79a727f70d80f68f8f7dc6"
 
 [[package]]
 name = "convert_case"
@@ -261,7 +261,7 @@ dependencies = [
 [[package]]
 name = "display_container"
 version = "0.9.0"
-source = "git+https://github.com/facebook/starlark-rust?rev=f0a4a7e03eef100b0c539806347aa3a481abc7ac#f0a4a7e03eef100b0c539806347aa3a481abc7ac"
+source = "git+https://github.com/facebook/starlark-rust?rev=db3b090a19f6134f2a79a727f70d80f68f8f7dc6#db3b090a19f6134f2a79a727f70d80f68f8f7dc6"
 dependencies = [
  "either",
  "indenter",
@@ -281,7 +281,7 @@ dependencies = [
 [[package]]
 name = "dupe"
 version = "0.9.1"
-source = "git+https://github.com/facebook/starlark-rust?rev=f0a4a7e03eef100b0c539806347aa3a481abc7ac#f0a4a7e03eef100b0c539806347aa3a481abc7ac"
+source = "git+https://github.com/facebook/starlark-rust?rev=db3b090a19f6134f2a79a727f70d80f68f8f7dc6#db3b090a19f6134f2a79a727f70d80f68f8f7dc6"
 dependencies = [
  "dupe_derive",
 ]
@@ -289,7 +289,7 @@ dependencies = [
 [[package]]
 name = "dupe_derive"
 version = "0.9.1"
-source = "git+https://github.com/facebook/starlark-rust?rev=f0a4a7e03eef100b0c539806347aa3a481abc7ac#f0a4a7e03eef100b0c539806347aa3a481abc7ac"
+source = "git+https://github.com/facebook/starlark-rust?rev=db3b090a19f6134f2a79a727f70d80f68f8f7dc6#db3b090a19f6134f2a79a727f70d80f68f8f7dc6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -392,7 +392,7 @@ dependencies = [
 [[package]]
 name = "gazebo"
 version = "0.8.1"
-source = "git+https://github.com/facebook/starlark-rust?rev=f0a4a7e03eef100b0c539806347aa3a481abc7ac#f0a4a7e03eef100b0c539806347aa3a481abc7ac"
+source = "git+https://github.com/facebook/starlark-rust?rev=db3b090a19f6134f2a79a727f70d80f68f8f7dc6#db3b090a19f6134f2a79a727f70d80f68f8f7dc6"
 dependencies = [
  "dupe",
  "gazebo_derive",
@@ -401,7 +401,7 @@ dependencies = [
 [[package]]
 name = "gazebo_derive"
 version = "0.8.0"
-source = "git+https://github.com/facebook/starlark-rust?rev=f0a4a7e03eef100b0c539806347aa3a481abc7ac#f0a4a7e03eef100b0c539806347aa3a481abc7ac"
+source = "git+https://github.com/facebook/starlark-rust?rev=db3b090a19f6134f2a79a727f70d80f68f8f7dc6#db3b090a19f6134f2a79a727f70d80f68f8f7dc6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1261,7 +1261,7 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 [[package]]
 name = "starlark"
 version = "0.13.0"
-source = "git+https://github.com/facebook/starlark-rust?rev=f0a4a7e03eef100b0c539806347aa3a481abc7ac#f0a4a7e03eef100b0c539806347aa3a481abc7ac"
+source = "git+https://github.com/facebook/starlark-rust?rev=db3b090a19f6134f2a79a727f70d80f68f8f7dc6#db3b090a19f6134f2a79a727f70d80f68f8f7dc6"
 dependencies = [
  "allocative",
  "anyhow",
@@ -1318,7 +1318,7 @@ dependencies = [
 [[package]]
 name = "starlark_derive"
 version = "0.13.0"
-source = "git+https://github.com/facebook/starlark-rust?rev=f0a4a7e03eef100b0c539806347aa3a481abc7ac#f0a4a7e03eef100b0c539806347aa3a481abc7ac"
+source = "git+https://github.com/facebook/starlark-rust?rev=db3b090a19f6134f2a79a727f70d80f68f8f7dc6#db3b090a19f6134f2a79a727f70d80f68f8f7dc6"
 dependencies = [
  "dupe",
  "proc-macro2",
@@ -1329,7 +1329,7 @@ dependencies = [
 [[package]]
 name = "starlark_map"
 version = "0.13.0"
-source = "git+https://github.com/facebook/starlark-rust?rev=f0a4a7e03eef100b0c539806347aa3a481abc7ac#f0a4a7e03eef100b0c539806347aa3a481abc7ac"
+source = "git+https://github.com/facebook/starlark-rust?rev=db3b090a19f6134f2a79a727f70d80f68f8f7dc6#db3b090a19f6134f2a79a727f70d80f68f8f7dc6"
 dependencies = [
  "allocative",
  "dupe",
@@ -1343,7 +1343,7 @@ dependencies = [
 [[package]]
 name = "starlark_syntax"
 version = "0.13.0"
-source = "git+https://github.com/facebook/starlark-rust?rev=f0a4a7e03eef100b0c539806347aa3a481abc7ac#f0a4a7e03eef100b0c539806347aa3a481abc7ac"
+source = "git+https://github.com/facebook/starlark-rust?rev=db3b090a19f6134f2a79a727f70d80f68f8f7dc6#db3b090a19f6134f2a79a727f70d80f68f8f7dc6"
 dependencies = [
  "allocative",
  "annotate-snippets",
@@ -1384,7 +1384,7 @@ dependencies = [
 [[package]]
 name = "strong_hash"
 version = "0.1.0"
-source = "git+https://github.com/facebook/starlark-rust?rev=f0a4a7e03eef100b0c539806347aa3a481abc7ac#f0a4a7e03eef100b0c539806347aa3a481abc7ac"
+source = "git+https://github.com/facebook/starlark-rust?rev=db3b090a19f6134f2a79a727f70d80f68f8f7dc6#db3b090a19f6134f2a79a727f70d80f68f8f7dc6"
 dependencies = [
  "ref-cast",
  "strong_hash_derive",
@@ -1393,7 +1393,7 @@ dependencies = [
 [[package]]
 name = "strong_hash_derive"
 version = "0.1.0"
-source = "git+https://github.com/facebook/starlark-rust?rev=f0a4a7e03eef100b0c539806347aa3a481abc7ac#f0a4a7e03eef100b0c539806347aa3a481abc7ac"
+source = "git+https://github.com/facebook/starlark-rust?rev=db3b090a19f6134f2a79a727f70d80f68f8f7dc6#db3b090a19f6134f2a79a727f70d80f68f8f7dc6"
 dependencies = [
  "quote",
  "syn 2.0.106",

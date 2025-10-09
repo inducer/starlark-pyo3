@@ -22,11 +22,11 @@ name = "starlark"
 # All these live in the starlark repo.
 # NOTE: When updating starlark, check for further reasons why Module may not be
 # Send.
-starlark = { git = "https://github.com/facebook/starlark-rust", rev = "f0a4a7e03eef100b0c539806347aa3a481abc7ac" }
-starlark_derive = { git = "https://github.com/facebook/starlark-rust", rev = "f0a4a7e03eef100b0c539806347aa3a481abc7ac" }
-gazebo = { git = "https://github.com/facebook/starlark-rust", rev = "f0a4a7e03eef100b0c539806347aa3a481abc7ac" }
-allocative = { git = "https://github.com/facebook/starlark-rust", rev = "f0a4a7e03eef100b0c539806347aa3a481abc7ac" }
-dupe = { git = "https://github.com/facebook/starlark-rust", rev = "f0a4a7e03eef100b0c539806347aa3a481abc7ac" }
+starlark = { git = "https://github.com/facebook/starlark-rust", rev = "db3b090a19f6134f2a79a727f70d80f68f8f7dc6" }
+starlark_derive = { git = "https://github.com/facebook/starlark-rust", rev = "db3b090a19f6134f2a79a727f70d80f68f8f7dc6" }
+gazebo = { git = "https://github.com/facebook/starlark-rust", rev = "db3b090a19f6134f2a79a727f70d80f68f8f7dc6" }
+allocative = { git = "https://github.com/facebook/starlark-rust", rev = "db3b090a19f6134f2a79a727f70d80f68f8f7dc6" }
+dupe = { git = "https://github.com/facebook/starlark-rust", rev = "db3b090a19f6134f2a79a727f70d80f68f8f7dc6" }
 
 anyhow = "^1.0.65"
 pyo3 = { version = "0.26", features = ["extension-module"] }
