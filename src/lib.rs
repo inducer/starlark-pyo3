@@ -566,7 +566,7 @@ impl AstModule {
     }
 
     #[pyo3(
-        text_signature = "(globals: Globals, loads: dict[str, Interface]) -> tuple[list[Error], None, None]"
+        text_signature = "(globals: Globals, loads: dict[str, Interface]) -> tuple[list[Error], Interface, tuple[Never, ...]]"
     )]
     fn typecheck<'py>(
         slf: Bound<'py, AstModule>,
