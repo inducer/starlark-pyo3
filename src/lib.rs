@@ -826,8 +826,33 @@ impl Module {
 
 // {{{ FrozenModule
 
-#[pyclass]
+/// .. automethod:: call
+#[pyclass(frozen)]
 struct FrozenModule(starlark::environment::FrozenModule);
+
+#[pymethods]
+impl FrozenModule {
+    /// .. versionadded:: 2025.2.2
+    #[pyo3(signature = (name, *args))]
+    fn call(
+        slf: &Bound<'_, FrozenModule>,
+        name: &str,
+        args: &Bound<'_, PyTuple>,
+    ) -> PyResult<Py<PyAny>> {
+        let function = convert_anyhow_err(slf.get().0.get(name))?;
+        let module = starlark::environment::Module::new();
+        let sl_args = args
+            .iter()
+            .map(|item| pyobject_to_value(item, module.heap()))
+            .collect::<PyResult<Vec<Value<'_>>>>()?;
+        let mut evaluator = starlark::eval::Evaluator::new(&module);
+        value_to_pyobject(convert_starlark_err(evaluator.eval_function(
+            function.value(),
+            &sl_args,
+            &[],
+        ))?)
+    }
+}
 
 // }}}
 

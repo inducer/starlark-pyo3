@@ -69,6 +69,21 @@ def test_python_callable_with_kwargs():
 
     assert val == 10
 
+
+ADD_STAR = """
+def add(x, y):
+    return x + y
+"""
+
+
+def test_call_starlark():
+    ast = sl.parse("add.star", ADD_STAR)
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+    sl.eval(mod, ast, glb)
+    fmod = mod.freeze()
+    assert fmod.call("add", 3, 4) == 7
+
 # }}}
 
 
