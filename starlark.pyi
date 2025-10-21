@@ -162,7 +162,8 @@ class Globals:
     def extended_by(extensions: list[LibraryExtension]) -> Globals: ...
 
 @final
-class FrozenModule: ...
+class FrozenModule:
+    def call(self, name: str, *args: object) -> object: ...
 
 @final
 class Module:
