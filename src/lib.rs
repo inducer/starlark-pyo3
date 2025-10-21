@@ -746,7 +746,7 @@ impl<'v> StarlarkValue<'v> for PythonCallableValue {
             )?;
             let py_args_tuple = convert_to_starlark_err(PyTuple::new(py, py_args))?;
 
-            // Handle named arguments.
+            // Handle named arguments
             let py_kwargs = PyDict::new(py);
             for name in args.names_map()?.iter() {
                 let key = name.0.as_str();
