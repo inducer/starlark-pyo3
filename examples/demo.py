@@ -24,7 +24,7 @@ mod = sl.Module()
 mod["a"] = 5
 
 
-def g(x):
+def g(x: int):
     print(f"g called with {x}")
     return 2 * x
 
