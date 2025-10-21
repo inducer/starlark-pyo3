@@ -40,7 +40,7 @@ def test_python_callable():
 
     mod["a"] = 5
 
-    def g(x):
+    def g(x: int):
         return 2 * x
 
     mod.add_callable("g", g)
@@ -58,7 +58,7 @@ def test_python_callable_with_kwargs():
 
     mod["a"] = 5
 
-    def g(x):
+    def g(x: int):
         return 2 * x
 
     mod.add_callable("g", g)
