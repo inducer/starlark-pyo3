@@ -106,15 +106,13 @@ fn value_to_pyobject(value: Value) -> PyResult<Py<PyAny>> {
     })
 }
 
-fn pyobject_to_value<'v>(obj: Py<PyAny>, heap: &'v Heap) -> PyResult<Value<'v>> {
-    Python::attach(|py| -> PyResult<Value<'v>> {
-        let json = py.import("json")?;
-        let json_str: String = json.getattr("dumps")?.call1((obj,))?.extract()?;
-        convert_anyhow_err(serde_to_starlark(
-            convert_serde_err(serde_json::from_str(&json_str))?,
-            heap,
-        ))
-    })
+fn pyobject_to_value<'v>(obj: Bound<PyAny>, heap: &'v Heap) -> PyResult<Value<'v>> {
+    let json = obj.py().import("json")?;
+    let json_str: String = json.getattr("dumps")?.call1((obj,))?.extract()?;
+    convert_anyhow_err(serde_to_starlark(
+        convert_serde_err(serde_json::from_str(&json_str))?,
+        heap,
+    ))
 }
 
 // }}}
@@ -746,6 +744,7 @@ impl<'v> StarlarkValue<'v> for PythonCallableValue {
                     .map(|v| -> PyResult<Py<PyAny>> { value_to_pyobject(v) }))
                 .collect::<PyResult<Vec<Py<PyAny>>>>(),
             )?;
+            let py_args_tuple = convert_to_starlark_err(PyTuple::new(py, py_args))?;
 
             // Handle named arguments.
             let py_kwargs = PyDict::new(py);
@@ -756,11 +755,8 @@ impl<'v> StarlarkValue<'v> for PythonCallableValue {
             }
 
             convert_to_starlark_err(pyobject_to_value(
-                convert_to_starlark_err(self.callable.call(
-                    py,
-                    convert_to_starlark_err(PyTuple::new(py, py_args))?,
-                    Some(&py_kwargs),
-                ))?,
+                convert_to_starlark_err(self.callable.call(py, py_args_tuple, Some(&py_kwargs)))?
+                    .into_bound(py),
                 eval.heap(),
             ))
         })
@@ -802,7 +798,7 @@ impl Module {
         })
     }
 
-    fn __setitem__(slf: &Bound<Self>, name: &str, obj: Py<PyAny>) -> PyResult<()> {
+    fn __setitem__(slf: &Bound<Self>, name: &str, obj: Bound<PyAny>) -> PyResult<()> {
         let self_ref = slf.borrow();
         let self_locked = self_ref.0.lock().unwrap();
         self_locked.set(name, pyobject_to_value(obj, self_locked.heap())?);
