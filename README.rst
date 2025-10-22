@@ -35,6 +35,10 @@ Python-like language to Python via `PyO3 <https://pyo3.rs>`__.
 
 *Status:* This is reasonably complete and usable.
 
+*Alternatives:* Other packages with similar goals but a different twist
+include `xingque <https://github.com/xen0n/xingque>`_ and the older
+`starlark-go <https://github.com/caketop/python-starlark-go>`__.
+
 Links
 -----
 
