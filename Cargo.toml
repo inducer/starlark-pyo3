@@ -39,6 +39,7 @@ num-bigint = "0.4.3"
 thiserror = "^1.0.35"
 
 proc-macro2 = "^1.0.63"
+rust_decimal = "1.33"
 
 
 [lints.clippy]

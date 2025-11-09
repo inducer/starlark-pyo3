@@ -39,6 +39,29 @@ Python-like language to Python via `PyO3 <https://pyo3.rs>`__.
 include `xingque <https://github.com/xen0n/xingque>`_ and the older
 `starlark-go <https://github.com/caketop/python-starlark-go>`__.
 
+Decimal support
+---------------
+
+This package preserves Python ``decimal.Decimal`` values end-to-end:
+
+-  Passing a Python ``Decimal`` into Starlark keeps it as a Starlark ``decimal``
+   value without converting to float, avoiding precision loss.
+-  Arithmetic and comparisons with other ``decimal`` values behave as expected;
+   results round-trip back to Python as ``Decimal``.
+
+Example::
+
+    import decimal
+    import starlark as sl
+
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+    mod["inputs"] = {"amount": decimal.Decimal("100.25"), "multiplier": 2}
+    ast = sl.parse("prog.star", "result = inputs['amount'] * inputs['multiplier'] + Decimal('0.75')\nresult")
+    val = sl.eval(mod, ast, glb)
+    assert isinstance(val, decimal.Decimal)
+    assert val == decimal.Decimal("201.25")
+
 Links
 -----
 
