@@ -258,7 +258,9 @@ def test_decimal_constructor_and_errors():
         ast = sl.parse(f"invalid-{idx}.star", snippet)
         try:
             sl.eval(mod, ast, glb)
-            raise AssertionError(f"expected Decimal constructor error for snippet {idx}")
+            raise AssertionError(
+                f"expected Decimal constructor error for snippet {idx}"
+            )
         except sl.StarlarkError:
             pass
 
