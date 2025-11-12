@@ -134,7 +134,7 @@ class AstModule:
     def typecheck(self,
                 globals: Globals,
                 loads: dict[str, Interface],
-            ) -> tuple[list[Error], None, None]:
+            ) -> tuple[list[Error], Interface, None]:
         ...
 
 @final
