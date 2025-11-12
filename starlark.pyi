@@ -134,7 +134,7 @@ class AstModule:
     def typecheck(self,
                 globals: Globals,
                 loads: dict[str, Interface],
-            ) -> tuple[list[Error], None, None]:
+            ) -> tuple[list[Error], Interface, None]:
         ...
 
 @final
@@ -163,7 +163,7 @@ class Globals:
 
 @final
 class FrozenModule:
-    def call(self, name: str, *args: object) -> object: ...
+    def call(self, name: str, *args: object, **kwargs: object) -> object: ...
 
 @final
 class Module:

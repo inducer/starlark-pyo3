@@ -949,11 +949,15 @@ struct FrozenModule(starlark::environment::FrozenModule);
 #[pymethods]
 impl FrozenModule {
     /// .. versionadded:: 2025.2.2
-    #[pyo3(signature = (name, *args))]
+    /// .. versionchanged:: 2025.2.3
+    ///
+    ///     Added support for keyword arguments.
+    #[pyo3(signature = (name, *args, **kwargs))]
     fn call(
         slf: &Bound<'_, FrozenModule>,
         name: &str,
         args: &Bound<'_, PyTuple>,
+        kwargs: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Py<PyAny>> {
         let function = convert_anyhow_err(slf.get().0.get(name))?;
         let module = starlark::environment::Module::new();
@@ -961,12 +965,24 @@ impl FrozenModule {
             .iter()
             .map(|item| pyobject_to_value(item, module.heap()))
             .collect::<PyResult<Vec<Value<'_>>>>()?;
+        let sl_kwargs = match kwargs {
+            Some(kwarg_seq) => kwarg_seq
+                .iter()
+                .map(|(k, v)| Ok((k.extract::<String>()?, pyobject_to_value(v, module.heap())?)))
+                .collect::<PyResult<Vec<(String, Value<'_>)>>>()?,
+            None => Vec::new(),
+        };
         let mut evaluator = starlark::eval::Evaluator::new(&module);
-        value_to_pyobject(convert_starlark_err(evaluator.eval_function(
-            function.value(),
-            &sl_args,
-            &[],
-        ))?)
+        value_to_pyobject(convert_starlark_err(
+            evaluator.eval_function(
+                function.value(),
+                &sl_args,
+                &sl_kwargs
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v.dupe()))
+                    .collect::<Vec<(&str, Value<'_>)>>(),
+            ),
+        )?)
     }
 }
 

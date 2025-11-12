@@ -71,7 +71,11 @@ def test_python_callable_with_kwargs():
 
 
 ADD_STAR = """
-def add(x, y):
+def add(x, y, a, b):
+    if a != "a":
+        return 0
+    if b != "b":
+        return 0
     return x + y
 """
 
@@ -82,7 +86,7 @@ def test_call_starlark():
     mod = sl.Module()
     sl.eval(mod, ast, glb)
     fmod = mod.freeze()
-    assert fmod.call("add", 3, 4) == 7
+    assert fmod.call("add", 3, 4, b="b", a="a") == 7
 
 # }}}
 
