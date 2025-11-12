@@ -43,7 +43,7 @@ use dupe::Dupe;
 use pyo3::sync::MutexExt;
 use pyo3::types::{PyDict, PyList, PyTuple};
 use starlark::analysis::AstModuleLint;
-use starlark::environment::{GlobalsBuilder, LibraryExtension as StarlarkLibraryExtension};
+use starlark::environment::GlobalsBuilder;
 use starlark::eval::Arguments;
 use starlark::starlark_simple_value;
 use starlark::values::dict::Dict;
@@ -713,98 +713,119 @@ impl AstModule {
 /// .. attribute:: Typing
 /// .. attribute:: Internal
 /// .. attribute:: CallStack
+/// .. attribute:: Decimal
 #[pyclass]
 #[derive(Clone)]
-struct LibraryExtension(starlark::environment::LibraryExtension);
+struct LibraryExtension {
+    kind: LibraryExtensionKind,
+}
+
+#[derive(Clone)]
+enum LibraryExtensionKind {
+    Upstream(starlark::environment::LibraryExtension),
+    Decimal,
+}
+
+macro_rules! starlark_extension {
+    ($name:ident) => {
+        LibraryExtension {
+            kind: LibraryExtensionKind::Upstream(
+                starlark::environment::LibraryExtension::$name,
+            ),
+        }
+    };
+}
+
+macro_rules! local_extension {
+    ($name:ident) => {
+        LibraryExtension {
+            kind: LibraryExtensionKind::$name,
+        }
+    };
+}
 
 #[pymethods]
 impl LibraryExtension {
     #[classattr]
     #[allow(non_snake_case)]
     fn StructType() -> Self {
-        LibraryExtension(starlark::environment::LibraryExtension::StructType)
+        starlark_extension!(StructType)
     }
     #[classattr]
     #[allow(non_snake_case)]
     fn RecordType() -> Self {
-        LibraryExtension(starlark::environment::LibraryExtension::RecordType)
+        starlark_extension!(RecordType)
     }
     #[classattr]
     #[allow(non_snake_case)]
     fn EnumType() -> Self {
-        LibraryExtension(starlark::environment::LibraryExtension::EnumType)
+        starlark_extension!(EnumType)
     }
     #[classattr]
     #[allow(non_snake_case)]
     fn Map() -> Self {
-        LibraryExtension(starlark::environment::LibraryExtension::Map)
+        starlark_extension!(Map)
     }
     #[classattr]
     #[allow(non_snake_case)]
     fn Filter() -> Self {
-        LibraryExtension(starlark::environment::LibraryExtension::Filter)
+        starlark_extension!(Filter)
     }
     #[classattr]
     #[allow(non_snake_case)]
     fn Partial() -> Self {
-        LibraryExtension(starlark::environment::LibraryExtension::Partial)
+        starlark_extension!(Partial)
     }
     #[classattr]
     #[allow(non_snake_case)]
     fn Debug() -> Self {
-        LibraryExtension(starlark::environment::LibraryExtension::Debug)
+        starlark_extension!(Debug)
     }
     #[classattr]
     #[allow(non_snake_case)]
     fn Print() -> Self {
-        LibraryExtension(starlark::environment::LibraryExtension::Print)
+        starlark_extension!(Print)
     }
     #[classattr]
     #[allow(non_snake_case)]
     fn Pprint() -> Self {
-        LibraryExtension(starlark::environment::LibraryExtension::Pprint)
+        starlark_extension!(Pprint)
     }
     #[classattr]
     #[allow(non_snake_case)]
     fn Breakpoint() -> Self {
-        LibraryExtension(starlark::environment::LibraryExtension::Breakpoint)
+        starlark_extension!(Breakpoint)
     }
     #[classattr]
     #[allow(non_snake_case)]
     fn Json() -> Self {
-        LibraryExtension(starlark::environment::LibraryExtension::Json)
+        starlark_extension!(Json)
     }
     #[classattr]
     #[allow(non_snake_case)]
     fn Typing() -> Self {
-        LibraryExtension(starlark::environment::LibraryExtension::Typing)
+        starlark_extension!(Typing)
     }
     #[classattr]
     #[allow(non_snake_case)]
     fn Internal() -> Self {
-        LibraryExtension(starlark::environment::LibraryExtension::Internal)
+        starlark_extension!(Internal)
     }
     #[classattr]
     #[allow(non_snake_case)]
     fn CallStack() -> Self {
-        LibraryExtension(starlark::environment::LibraryExtension::CallStack)
+        starlark_extension!(CallStack)
+    }
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn Decimal() -> Self {
+        local_extension!(Decimal)
     }
 }
 
 // }}}
 
 // {{{ Globals
-
-fn build_globals_with_extensions(
-    extensions: &[StarlarkLibraryExtension],
-) -> starlark::environment::Globals {
-    let mut builder = GlobalsBuilder::standard();
-    for extension in extensions {
-        extension.add(&mut builder);
-    }
-    decimal_module(&mut builder);
-    builder.build()
-}
 
 /// .. automethod:: standard
 /// .. automethod:: extended_by
@@ -816,14 +837,22 @@ impl Globals {
     #[staticmethod]
     #[pyo3(text_signature = "() -> Globals")]
     fn standard() -> PyResult<Globals> {
-        Ok(Globals(build_globals_with_extensions(&[])))
+        Ok(Globals(starlark::environment::Globals::standard()))
     }
 
     #[staticmethod]
     #[pyo3(text_signature = "(extensions: list[LibraryExtension]) -> Globals")]
     fn extended_by(extensions: Vec<LibraryExtension>) -> PyResult<Globals> {
-        let exts: Vec<StarlarkLibraryExtension> = extensions.iter().map(|ext| ext.0).collect();
-        Ok(Globals(build_globals_with_extensions(&exts)))
+        let mut builder = GlobalsBuilder::standard();
+
+        for ext in &extensions {
+            match &ext.kind {
+                LibraryExtensionKind::Upstream(upstream) => upstream.add(&mut builder),
+                LibraryExtensionKind::Decimal => decimal_module(&mut builder),
+            }
+        }
+
+        Ok(Globals(builder.build()))
     }
 }
 

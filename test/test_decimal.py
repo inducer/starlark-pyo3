@@ -7,7 +7,7 @@ import starlark as sl
 
 def test_decimal_round_trip():
     """Test Python Decimal -> Starlark -> Python round-trip conversion"""
-    glb = sl.Globals.standard()
+    glb = sl.Globals.extended_by([sl.LibraryExtension.Decimal])
     mod = sl.Module()
     mod["data"] = {
         "amount": decimal.Decimal("100.25"),
@@ -27,7 +27,7 @@ result
 
 def test_decimal_arithmetic():
     """Test basic arithmetic operations with int coercion"""
-    glb = sl.Globals.standard()
+    glb = sl.Globals.extended_by([sl.LibraryExtension.Decimal])
     mod = sl.Module()
 
     program = """
@@ -48,7 +48,7 @@ c = Decimal("10.50") * 4        # multiplication with int
 
 def test_decimal_division_and_modulo():
     """Test division, floor division, and modulo operations"""
-    glb = sl.Globals.standard()
+    glb = sl.Globals.extended_by([sl.LibraryExtension.Decimal])
     mod = sl.Module()
 
     program = """
@@ -71,7 +71,7 @@ d = Decimal("7.50") / Decimal("2.5")  # decimal / decimal
 
 def test_decimal_negation():
     """Test unary negation operator"""
-    glb = sl.Globals.standard()
+    glb = sl.Globals.extended_by([sl.LibraryExtension.Decimal])
     mod = sl.Module()
 
     program = """
@@ -91,7 +91,7 @@ def test_decimal_reverse_operations():
     Only radd and rmul are tested because Starlark doesn't support
     reverse subtraction (rsub) or reverse division (rdiv) operations.
     """
-    glb = sl.Globals.standard()
+    glb = sl.Globals.extended_by([sl.LibraryExtension.Decimal])
     mod = sl.Module()
     mod["value"] = decimal.Decimal("10.50")
 
@@ -108,7 +108,7 @@ b = 3 * value           # reverse multiplication
 
 def test_decimal_comparisons_and_hashing():
     """Test comparison operators and use as dict keys (hashing)"""
-    glb = sl.Globals.standard()
+    glb = sl.Globals.extended_by([sl.LibraryExtension.Decimal])
     mod = sl.Module()
     mod["data"] = {
         "a": decimal.Decimal("10.00"),
@@ -134,7 +134,7 @@ result
 
 def test_decimal_truthiness():
     """Test Decimal truthiness: zero is falsy, non-zero is truthy"""
-    glb = sl.Globals.standard()
+    glb = sl.Globals.extended_by([sl.LibraryExtension.Decimal])
     mod = sl.Module()
 
     program = """
@@ -155,7 +155,7 @@ negative_bool = bool(Decimal("-5"))
 
 def test_decimal_in_nested_structures():
     """Test Decimal values in nested dicts, lists, and tuples"""
-    glb = sl.Globals.standard()
+    glb = sl.Globals.extended_by([sl.LibraryExtension.Decimal])
     mod = sl.Module()
     mod["data"] = {
         "in_list": [decimal.Decimal("1.5"), decimal.Decimal("2.5")],
@@ -182,7 +182,7 @@ a + b + c
 
 def test_decimal_dict_mutation():
     """Test that Decimal values can be stored and mutated in dicts"""
-    glb = sl.Globals.standard()
+    glb = sl.Globals.extended_by([sl.LibraryExtension.Decimal])
     mod = sl.Module()
     mod["value"] = decimal.Decimal("10.00")
     mod["state"] = {"total": decimal.Decimal("0.00")}
@@ -205,7 +205,7 @@ state["total"]
 
 def test_decimal_precision_vs_float():
     """Decimal preserves precision where float loses it (classic 0.1 + 0.2 example)"""
-    glb = sl.Globals.standard()
+    glb = sl.Globals.extended_by([sl.LibraryExtension.Decimal])
     mod = sl.Module()
 
     program = """
@@ -222,7 +222,7 @@ flt_sum = 0.1 + 0.2 == 0.3
 
 def test_decimal_rejects_float():
     """Mixing Decimal with float should fail to prevent silent precision loss"""
-    glb = sl.Globals.standard()
+    glb = sl.Globals.extended_by([sl.LibraryExtension.Decimal])
     mod = sl.Module()
 
     program = """
@@ -238,7 +238,7 @@ _ = Decimal("1.0") + 0.5
 
 def test_decimal_constructor_and_errors():
     """Test Decimal constructor with valid and invalid inputs"""
-    glb = sl.Globals.standard()
+    glb = sl.Globals.extended_by([sl.LibraryExtension.Decimal])
     mod = sl.Module()
 
     # Valid constructors (string and int)
@@ -267,7 +267,7 @@ def test_decimal_constructor_and_errors():
 
 def test_decimal_division_by_zero():
     """Test that division by zero raises appropriate errors"""
-    glb = sl.Globals.standard()
+    glb = sl.Globals.extended_by([sl.LibraryExtension.Decimal])
     mod = sl.Module()
 
     program = "Decimal('10') / Decimal('0')"

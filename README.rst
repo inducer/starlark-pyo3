@@ -54,13 +54,21 @@ Example::
     import decimal
     import starlark as sl
 
-    glb = sl.Globals.standard()
+    glb = sl.Globals.extended_by([sl.LibraryExtension.Decimal])
     mod = sl.Module()
     mod["inputs"] = {"amount": decimal.Decimal("100.25"), "multiplier": 2}
     ast = sl.parse("prog.star", "result = inputs['amount'] * inputs['multiplier'] + Decimal('0.75')\nresult")
     val = sl.eval(mod, ast, glb)
     assert isinstance(val, decimal.Decimal)
     assert val == decimal.Decimal("201.25")
+
+The Starlark ``Decimal()`` constructor uses ``rust_decimal``, which differs
+from Python's ``decimal.Decimal`` in several ways:
+
+- **Fixed precision:** 28-29 significant digits (cannot be configured at runtime)
+- **No context object:** No ``getcontext()`` or runtime precision/rounding mode configuration
+- **Fixed size:** 128-bit representation; operations exceeding this range will error
+- **Default rounding:** Half-even (banker's rounding)
 
 Links
 -----

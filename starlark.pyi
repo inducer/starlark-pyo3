@@ -153,6 +153,7 @@ class LibraryExtension:
     Typing: LibraryExtension
     Internal: LibraryExtension
     CallStack: LibraryExtension
+    Decimal: LibraryExtension
 
 @final
 class Globals:
