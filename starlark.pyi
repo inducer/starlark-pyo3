@@ -163,7 +163,7 @@ class Globals:
 
 @final
 class FrozenModule:
-    def call(self, name: str, *args: object) -> object: ...
+    def call(self, name: str, *args: object, **kwargs: object) -> object: ...
 
 @final
 class Module:
