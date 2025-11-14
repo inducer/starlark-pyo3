@@ -148,6 +148,39 @@ def test_type_check():
 
     assert len(errs) == 2
 
+
+EXT_TYPE_STAR = """
+FlowersEnum = enum("daisies", "roses", "posies")
+
+EmployeeRecord = record(
+    id=int,
+    name=str,
+    salary=float,
+)
+
+def get_custom_types():
+    return (
+        FlowersEnum("daisies"),
+        EmployeeRecord(id=1, name="John Doe", salary=5.0),
+        struct(id=1, name="John Doe", salary=5.0),
+    )
+"""
+
+
+def test_ext_type_conversion():
+    ast = sl.parse("ext-type.star", EXT_TYPE_STAR)
+    glb = (sl.Globals.standard().extended_by([
+                sl.LibraryExtension.StructType,
+                sl.LibraryExtension.EnumType,
+                sl.LibraryExtension.RecordType,
+            ]))
+    mod = sl.Module()
+    sl.eval(mod, ast, glb)
+    fmod = mod.freeze()
+    retval = fmod.call("get_custom_types")
+    empl = {"id": 1, "name": "John Doe", "salary": 5.0}
+    assert retval == ["daisies", empl, empl]
+
 # }}}
 
 
