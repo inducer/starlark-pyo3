@@ -32,7 +32,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rust_decimal::Decimal;
 use starlark::collections::StarlarkHasher;
-use starlark::environment::GlobalsBuilder;
+use starlark::environment::{GlobalsBuilder, Methods, MethodsBuilder, MethodsStatic};
 use starlark::starlark_simple_value;
 use starlark::values::{
     Heap, NoSerialize, ProvidesStaticType, StarlarkValue, Value, ValueError, ValueLike,
@@ -204,9 +204,40 @@ impl<'v> StarlarkValue<'v> for DecimalValue {
         self.value.hash(hasher);
         Ok(())
     }
+
+    fn get_methods() -> Option<&'static Methods> {
+        static RES: MethodsStatic = MethodsStatic::new();
+        RES.methods(decimal_methods)
+    }
+}
+
+#[starlark_module]
+fn decimal_methods(builder: &mut MethodsBuilder) {
+    /// Get the scale (number of decimal places) of this RustDecimal
+    fn scale<'v>(#[starlark(this)] this: Value<'v>) -> starlark::Result<i32> {
+        let decimal = this.downcast_ref::<DecimalValue>().unwrap();
+        Ok(decimal.value.scale() as i32)
+    }
+
+    /// Round this RustDecimal to the specified number of decimal places
+    fn round_dp<'v>(
+        #[starlark(this)] this: Value<'v>,
+        #[starlark(require = pos)] decimal_places: i32,
+        heap: &'v Heap,
+    ) -> starlark::Result<Value<'v>> {
+        let decimal = this.downcast_ref::<DecimalValue>().unwrap();
+        if decimal_places < 0 {
+            return Err(ValueError::IncorrectParameterTypeNamed("decimal_places".to_owned())
+                .into());
+        }
+        let rounded = decimal.value.round_dp(decimal_places as u32);
+        Ok(alloc_decimal(heap, rounded))
+    }
 }
 
 /// Convert DecimalValue to Python Decimal object
+/// Converts via string representation, preserving the exact value and scale.
+/// Does not consult or modify Python's decimal context.
 pub fn decimal_to_python(decimal_value: &DecimalValue) -> PyResult<Py<PyAny>> {
     let decimal_str = decimal_value.value.to_string();
     Python::attach(|py| {
@@ -218,6 +249,8 @@ pub fn decimal_to_python(decimal_value: &DecimalValue) -> PyResult<Py<PyAny>> {
 }
 
 /// Try to convert Python object to DecimalValue if it's a Python Decimal
+/// Converts via string representation, preserving the exact value and scale.
+/// Does not consult or modify Python's decimal context.
 pub fn python_to_decimal<'v>(obj: &Bound<PyAny>, heap: &'v Heap) -> PyResult<Option<Value<'v>>> {
     if let Ok(class) = obj.getattr("__class__") {
         let module_name = match class.getattr("__module__") {

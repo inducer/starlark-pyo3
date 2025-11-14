@@ -278,6 +278,72 @@ def test_decimal_division_by_zero():
     except sl.StarlarkError:
         pass
 
+
+def test_decimal_scale_and_rounding():
+    """Test scale() and round_dp() methods for precision control"""
+    glb = sl.Globals.extended_by([sl.LibraryExtension.RustDecimal])
+    mod = sl.Module()
+
+    program = """
+# Test reading scale from various decimals
+a_scale = RustDecimal("3.14159").scale()
+b_scale = RustDecimal("100.00").scale()
+c_scale = RustDecimal("42").scale()
+
+# Test rounding to different decimal places
+d = RustDecimal("3.14159")
+d_rounded_2 = d.round_dp(2)
+d_rounded_4 = d.round_dp(4)
+d_rounded_0 = d.round_dp(0)
+
+# Verify scale changes after rounding
+d_rounded_2_scale = d_rounded_2.scale()
+d_rounded_4_scale = d_rounded_4.scale()
+d_rounded_0_scale = d_rounded_0.scale()
+
+# Test rounding with Banker's rounding (round half to even)
+e = RustDecimal("2.5")
+e_rounded = e.round_dp(0)
+f = RustDecimal("3.5")
+f_rounded = f.round_dp(0)
+
+(a_scale, b_scale, c_scale,
+ d_rounded_2, d_rounded_4, d_rounded_0,
+ d_rounded_2_scale, d_rounded_4_scale, d_rounded_0_scale,
+ e_rounded, f_rounded)
+"""
+    ast = sl.parse("scale-rounding.star", program)
+    val = sl.eval(mod, ast, glb)
+
+    assert val == [
+        5,  # a_scale: "3.14159" has 5 decimal places
+        2,  # b_scale: "100.00" has 2 decimal places
+        0,  # c_scale: "42" has 0 decimal places
+        decimal.Decimal("3.14"),    # d_rounded_2
+        decimal.Decimal("3.1416"),  # d_rounded_4
+        decimal.Decimal("3"),       # d_rounded_0
+        2,  # d_rounded_2_scale
+        4,  # d_rounded_4_scale
+        0,  # d_rounded_0_scale
+        decimal.Decimal("2"),  # e_rounded: Banker's rounding (2.5 -> 2)
+        decimal.Decimal("4"),  # f_rounded: Banker's rounding (3.5 -> 4)
+    ]
+
+
+def test_decimal_round_dp_error_handling():
+    """Test that round_dp() handles invalid inputs appropriately"""
+    glb = sl.Globals.extended_by([sl.LibraryExtension.RustDecimal])
+    mod = sl.Module()
+
+    # Test negative decimal_places (should error)
+    program = "RustDecimal('3.14').round_dp(-1)"
+    ast = sl.parse("round-negative.star", program)
+    try:
+        _ = sl.eval(mod, ast, glb)
+        raise AssertionError("expected error for negative decimal_places")
+    except sl.StarlarkError:
+        pass
+
 # }}}
 
 
