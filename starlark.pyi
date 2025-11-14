@@ -153,6 +153,7 @@ class LibraryExtension:
     Typing: LibraryExtension
     Internal: LibraryExtension
     CallStack: LibraryExtension
+    RustDecimal: LibraryExtension
 
 @final
 class Globals:
