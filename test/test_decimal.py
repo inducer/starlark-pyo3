@@ -39,11 +39,11 @@ c = RustDecimal("10.50") * 4        # multiplication with int
     ast = sl.parse("arithmetic.star", program)
     val = sl.eval(mod, ast, glb)
 
-    assert val == (
+    assert val == [
         decimal.Decimal("125.00"),
         decimal.Decimal("75.00"),
         decimal.Decimal("42.00"),
-    )
+    ]
 
 
 def test_decimal_division_and_modulo():
@@ -61,12 +61,12 @@ d = RustDecimal("7.50") / RustDecimal("2.5")  # decimal / decimal
     ast = sl.parse("division.star", program)
     val = sl.eval(mod, ast, glb)
 
-    assert val == (
+    assert val == [
         decimal.Decimal("2.5"),
         decimal.Decimal("2"),
         decimal.Decimal("2.00"),
         decimal.Decimal("3"),
-    )
+    ]
 
 
 def test_decimal_negation():
@@ -82,7 +82,7 @@ b = -RustDecimal("-5.25")
     ast = sl.parse("negation.star", program)
     val = sl.eval(mod, ast, glb)
 
-    assert val == (decimal.Decimal("-10.50"), decimal.Decimal("5.25"))
+    assert val == [decimal.Decimal("-10.50"), decimal.Decimal("5.25")]
 
 
 def test_decimal_reverse_operations():
@@ -103,7 +103,7 @@ b = 3 * value           # reverse multiplication
     ast = sl.parse("reverse.star", program)
     val = sl.eval(mod, ast, glb)
 
-    assert val == (decimal.Decimal("15.50"), decimal.Decimal("31.50"))
+    assert val == [decimal.Decimal("15.50"), decimal.Decimal("31.50")]
 
 
 def test_decimal_comparisons_and_hashing():
@@ -129,7 +129,7 @@ result
     ast = sl.parse("compare-hash.star", program)
     val = sl.eval(mod, ast, glb)
 
-    assert val == (True, False, False, 1, 2)
+    assert val == [True, False, False, 1, 2]
 
 
 def test_decimal_truthiness():
@@ -146,7 +146,7 @@ negative_bool = bool(RustDecimal("-5"))
     ast = sl.parse("truthiness.star", program)
     val = sl.eval(mod, ast, glb)
 
-    assert val == (False, True, True)
+    assert val == [False, True, True]
 
 # }}}
 
@@ -217,7 +217,7 @@ flt_sum = 0.1 + 0.2 == 0.3
     ast = sl.parse("precision.star", program)
     val = sl.eval(mod, ast, glb)
 
-    assert val == (True, False)  # Decimal is exact, float loses precision
+    assert val == [True, False]  # Decimal is exact, float loses precision
 
 
 def test_decimal_rejects_float():
@@ -247,7 +247,7 @@ def test_decimal_constructor_and_errors():
 """
     ast = sl.parse("constructor.star", program)
     result = sl.eval(mod, ast, glb)
-    assert result == (decimal.Decimal("0.125"), decimal.Decimal("5"))
+    assert result == [decimal.Decimal("0.125"), decimal.Decimal("5")]
 
     # Invalid constructors (float and bool should be rejected)
     bad_programs = [

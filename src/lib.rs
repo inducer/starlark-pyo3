@@ -49,6 +49,7 @@ use starlark::starlark_simple_value;
 use starlark::values::dict::Dict;
 use starlark::values::dict::DictRef;
 use starlark::values::list::{AllocList, ListRef};
+use starlark::values::structs::StructRef;
 use starlark::values::tuple::TupleRef;
 use starlark::values::FreezeResult;
 use starlark::values::Heap;
@@ -156,13 +157,26 @@ fn value_to_pyobject(value: Value) -> PyResult<Py<PyAny>> {
             for item in tuple.iter() {
                 elements.push(value_to_pyobject(item)?);
             }
-            let py_tuple = PyTuple::new(
+            // Convert to list for backwards compatibility with JSON path
+            let py_list = PyList::new(
                 py,
                 elements
                     .into_iter()
                     .map(|obj| obj.into_bound(py)),
             )?;
-            Ok(py_tuple.into_any().unbind())
+            Ok(py_list.into_any().unbind())
+        });
+    }
+
+    if let Some(struct_ref) = StructRef::from_value(value) {
+        return Python::attach(|py| {
+            let py_dict = PyDict::new(py);
+            for (key, val) in struct_ref.iter() {
+                let py_key = key.as_str();
+                let py_val = value_to_pyobject(val)?.into_bound(py);
+                py_dict.set_item(py_key, py_val)?;
+            }
+            Ok(py_dict.into_any().unbind())
         });
     }
 
@@ -204,9 +218,9 @@ fn pyobject_to_value<'v>(obj: Bound<PyAny>, heap: &'v Heap) -> PyResult<Value<'v
     }
 
     if let Ok(tuple) = obj.downcast::<PyTuple>() {
-        // Convert Python tuples to Starlark lists for backwards compatibility
-        // (JSON path converted tuples to lists). Starlark tuples still convert
-        // back to Python tuples in value_to_pyobject for immutability preservation.
+        // Convert Python tuples to Starlark lists for backwards compatibility.
+        // Both Python tuples and lists become Starlark lists, and Starlark tuples
+        // also convert to Python lists (matching the old JSON path behavior).
         let elements = tuple
             .iter()
             .map(|item| pyobject_to_value(item, heap))
