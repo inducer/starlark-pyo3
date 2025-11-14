@@ -44,9 +44,9 @@ Decimal support
 
 This package preserves Python ``decimal.Decimal`` values end-to-end:
 
--  Passing a Python ``Decimal`` into Starlark keeps it as a Starlark ``decimal``
+-  Passing a Python ``Decimal`` into Starlark keeps it as a Starlark ``rust_decimal``
    value without converting to float, avoiding precision loss.
--  Arithmetic and comparisons with other ``decimal`` values behave as expected;
+-  Arithmetic and comparisons with other ``rust_decimal`` values behave as expected;
    results round-trip back to Python as ``Decimal``.
 
 Example::
@@ -54,15 +54,15 @@ Example::
     import decimal
     import starlark as sl
 
-    glb = sl.Globals.extended_by([sl.LibraryExtension.Decimal])
+    glb = sl.Globals.extended_by([sl.LibraryExtension.RustDecimal])
     mod = sl.Module()
     mod["inputs"] = {"amount": decimal.Decimal("100.25"), "multiplier": 2}
-    ast = sl.parse("prog.star", "result = inputs['amount'] * inputs['multiplier'] + Decimal('0.75')\nresult")
+    ast = sl.parse("prog.star", "result = inputs['amount'] * inputs['multiplier'] + RustDecimal('0.75')\nresult")
     val = sl.eval(mod, ast, glb)
     assert isinstance(val, decimal.Decimal)
     assert val == decimal.Decimal("201.25")
 
-The Starlark ``Decimal()`` constructor uses ``rust_decimal``, which differs
+The Starlark ``RustDecimal()`` constructor uses ``rust_decimal``, which differs
 from Python's ``decimal.Decimal`` in several ways:
 
 - **Fixed precision:** 28-29 significant digits (cannot be configured at runtime)

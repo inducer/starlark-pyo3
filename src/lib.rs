@@ -113,9 +113,9 @@ fn serde_to_starlark(x: serde_json::Value, heap: &Heap) -> anyhow::Result<Value<
 
 // Converts Starlark values to Python objects.
 //
-// For custom types (like Decimal) and nested structures (dict/list/tuple), we handle
+// For custom types (like RustDecimal) and nested structures (dict/list/tuple), we handle
 // conversion directly rather than going through JSON. This allows custom types to work
-// in nested structures while preserving their semantics (e.g., Decimal precision).
+// in nested structures while preserving their semantics (e.g., RustDecimal precision).
 // Primitive types still use the JSON fallback path for simplicity.
 fn value_to_pyobject(value: Value) -> PyResult<Py<PyAny>> {
     if let Some(decimal) = value.downcast_ref::<DecimalValue>() {
@@ -177,7 +177,7 @@ fn value_to_pyobject(value: Value) -> PyResult<Py<PyAny>> {
 //
 // Mirrors value_to_pyobject's approach: handle custom types and nested structures
 // directly, falling back to JSON for primitives. This enables custom types like
-// Decimal to work correctly in nested structures.
+// RustDecimal to work correctly in nested structures.
 fn pyobject_to_value<'v>(obj: Bound<PyAny>, heap: &'v Heap) -> PyResult<Value<'v>> {
     if let Some(value) = python_to_decimal(&obj, heap)? {
         return Ok(value);
@@ -713,7 +713,7 @@ impl AstModule {
 /// .. attribute:: Typing
 /// .. attribute:: Internal
 /// .. attribute:: CallStack
-/// .. attribute:: Decimal
+/// .. attribute:: RustDecimal
 #[pyclass]
 #[derive(Clone)]
 struct LibraryExtension {
@@ -723,7 +723,7 @@ struct LibraryExtension {
 #[derive(Clone)]
 enum LibraryExtensionKind {
     Upstream(starlark::environment::LibraryExtension),
-    Decimal,
+    RustDecimal,
 }
 
 macro_rules! starlark_extension {
@@ -818,8 +818,8 @@ impl LibraryExtension {
     }
     #[classattr]
     #[allow(non_snake_case)]
-    fn Decimal() -> Self {
-        local_extension!(Decimal)
+    fn RustDecimal() -> Self {
+        local_extension!(RustDecimal)
     }
 }
 
@@ -848,7 +848,7 @@ impl Globals {
         for ext in &extensions {
             match &ext.kind {
                 LibraryExtensionKind::Upstream(upstream) => upstream.add(&mut builder),
-                LibraryExtensionKind::Decimal => decimal_module(&mut builder),
+                LibraryExtensionKind::RustDecimal => decimal_module(&mut builder),
             }
         }
 

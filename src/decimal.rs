@@ -20,7 +20,7 @@
 //!
 //! Provides first-class Decimal support via the rust_decimal crate,
 //! enabling precise decimal arithmetic without float precision loss.
-//! Exposes a `Decimal()` constructor to Starlark for creating decimal values.
+//! Exposes a `RustDecimal()` constructor to Starlark for creating decimal values.
 
 use std::cmp::Ordering;
 use std::fmt::{self, Display};
@@ -55,7 +55,7 @@ impl Display for DecimalValue {
 fn decimal_operation_error(op: &str, other_type: &str) -> starlark::Error {
     ValueError::OperationNotSupportedBinary {
         op: op.to_owned(),
-        left: "decimal".to_owned(),
+        left: "rust_decimal".to_owned(),
         right: other_type.to_owned(),
     }
     .into()
@@ -63,7 +63,7 @@ fn decimal_operation_error(op: &str, other_type: &str) -> starlark::Error {
 
 fn decimal_constructor_error(arg_type: &str) -> starlark::Error {
     ValueError::OperationNotSupported {
-        op: "Decimal()".to_owned(),
+        op: "RustDecimal()".to_owned(),
         typ: arg_type.to_owned(),
     }
     .into()
@@ -88,7 +88,7 @@ where
         Decimal::from_str(&json_repr).map_err(|_| make_error(ty))
     } else {
         // Intentionally do not coerce floats to Decimal to avoid silently embedding
-        // binary floating-point artifacts; require explicit Decimal("...") instead.
+        // binary floating-point artifacts; require explicit RustDecimal("...") instead.
         Err(make_error(ty))
     }
 }
@@ -113,14 +113,14 @@ pub fn alloc_decimal<'v>(heap: &'v Heap, decimal: Decimal) -> Value<'v> {
 
 #[starlark_module]
 pub fn decimal_module(builder: &mut GlobalsBuilder) {
-    /// Construct a decimal value from a string, int, or existing decimal.
-    fn Decimal<'v>(#[starlark(require = pos)] value: Value<'v>, heap: &'v Heap) -> starlark::Result<Value<'v>> {
+    /// Construct a rust_decimal value from a string, int, or existing RustDecimal.
+    fn RustDecimal<'v>(#[starlark(require = pos)] value: Value<'v>, heap: &'v Heap) -> starlark::Result<Value<'v>> {
         let decimal = decimal_from_constructor(value)?;
         Ok(alloc_decimal(heap, decimal))
     }
 }
 
-#[starlark_value(type = "decimal")]
+#[starlark_value(type = "rust_decimal")]
 impl<'v> StarlarkValue<'v> for DecimalValue {
     fn equals(&self, other: Value<'v>) -> starlark::Result<bool> {
         match decimal_from_value(other, "==") {
