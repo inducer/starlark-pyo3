@@ -360,7 +360,6 @@ def test_decimal_in_struct():
     assert sl.eval(mod, ast, glb) == {"mydec": decimal.Decimal("3.14")}
 
 
-@pytest.mark.xfail
 def test_decimal_in_record():
     glb = sl.Globals.extended_by([
                      sl.LibraryExtension.RustDecimal,

@@ -49,6 +49,7 @@ use starlark::starlark_simple_value;
 use starlark::values::dict::Dict;
 use starlark::values::dict::DictRef;
 use starlark::values::list::{AllocList, ListRef};
+use starlark::values::record::Record;
 use starlark::values::structs::StructRef;
 use starlark::values::tuple::TupleRef;
 use starlark::values::FreezeResult;
@@ -175,6 +176,17 @@ fn value_to_pyobject(value: Value) -> PyResult<Py<PyAny>> {
                 let py_key = key.as_str();
                 let py_val = value_to_pyobject(val)?.into_bound(py);
                 py_dict.set_item(py_key, py_val)?;
+            }
+            Ok(py_dict.into_any().unbind())
+        });
+    }
+
+    if let Some(record) = Record::from_value(value) {
+        return Python::attach(|py| {
+            let py_dict = PyDict::new(py);
+            for (key, val) in record.iter() {
+                let py_val = value_to_pyobject(val)?.into_bound(py);
+                py_dict.set_item(key, py_val)?;
             }
             Ok(py_dict.into_any().unbind())
         });
