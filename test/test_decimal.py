@@ -346,6 +346,34 @@ def test_no_loss_of_precision():
     assert sl.eval(mod, ast, glb) == decimal.Decimal("6.14")
 
 
+def test_decimal_in_struct():
+    glb = sl.Globals.extended_by([
+                     sl.LibraryExtension.RustDecimal,
+                     sl.LibraryExtension.StructType,
+                     sl.LibraryExtension.RecordType,
+                     sl.LibraryExtension.Typing,
+                 ])
+    mod = sl.Module()
+
+    program = "struct(mydec=RustDecimal('3.14'))"
+    ast = sl.parse("struct.star", program)
+    assert sl.eval(mod, ast, glb) == {"mydec": decimal.Decimal("3.14")}
+
+
+@pytest.mark.xfail
+def test_decimal_in_record():
+    glb = sl.Globals.extended_by([
+                     sl.LibraryExtension.RustDecimal,
+                     sl.LibraryExtension.StructType,
+                     sl.LibraryExtension.RecordType,
+                     sl.LibraryExtension.Typing,
+                 ])
+    mod = sl.Module()
+
+    program = "MyRec = record(mydec=typing.Any)\nMyRec(mydec=RustDecimal('3.14'))"
+    ast = sl.parse("record.star", program)
+    assert sl.eval(mod, ast, glb) == {"mydec": decimal.Decimal("3.14")}
+
 # }}}
 
 
