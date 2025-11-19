@@ -1,5 +1,7 @@
 import decimal
 
+import pytest
+
 import starlark as sl
 
 
@@ -229,11 +231,8 @@ def test_decimal_rejects_float():
 _ = RustDecimal("1.0") + 0.5
 """
     ast = sl.parse("reject-float.star", program)
-    try:
+    with pytest.raises(sl.StarlarkError):
         _ = sl.eval(mod, ast, glb)
-        raise AssertionError("expected Decimal/float mixing to fail")
-    except sl.StarlarkError:
-        pass
 
 
 def test_decimal_constructor_and_errors():
@@ -256,13 +255,8 @@ def test_decimal_constructor_and_errors():
     ]
     for idx, snippet in enumerate(bad_programs):
         ast = sl.parse(f"invalid-{idx}.star", snippet)
-        try:
+        with pytest.raises(sl.StarlarkError):
             sl.eval(mod, ast, glb)
-            raise AssertionError(
-                f"expected Decimal constructor error for snippet {idx}"
-            )
-        except sl.StarlarkError:
-            pass
 
 
 def test_decimal_division_by_zero():
@@ -272,11 +266,8 @@ def test_decimal_division_by_zero():
 
     program = "RustDecimal('10') / RustDecimal('0')"
     ast = sl.parse("divzero.star", program)
-    try:
-        _ = sl.eval(mod, ast, glb)
-        raise AssertionError("expected division by zero error")
-    except sl.StarlarkError:
-        pass
+    with pytest.raises(sl.StarlarkError):
+        sl.eval(mod, ast, glb)
 
 
 def test_decimal_scale_and_rounding():
@@ -338,11 +329,8 @@ def test_decimal_round_dp_error_handling():
     # Test negative decimal_places (should error)
     program = "RustDecimal('3.14').round_dp(-1)"
     ast = sl.parse("round-negative.star", program)
-    try:
-        _ = sl.eval(mod, ast, glb)
-        raise AssertionError("expected error for negative decimal_places")
-    except sl.StarlarkError:
-        pass
+    with pytest.raises(sl.StarlarkError):
+        sl.eval(mod, ast, glb)
 
 # }}}
 
