@@ -332,6 +332,20 @@ def test_decimal_round_dp_error_handling():
     with pytest.raises(sl.StarlarkError):
         sl.eval(mod, ast, glb)
 
+
+def test_no_loss_of_precision():
+    glb = sl.Globals.extended_by([sl.LibraryExtension.RustDecimal])
+    mod = sl.Module()
+
+    program = "RustDecimal('3').scale()"
+    ast = sl.parse("precision.star", program)
+    assert sl.eval(mod, ast, glb) == 0
+
+    program = "RustDecimal('3.14') + RustDecimal('3')"
+    ast = sl.parse("precision.star", program)
+    assert sl.eval(mod, ast, glb) == decimal.Decimal("6.14")
+
+
 # }}}
 
 
