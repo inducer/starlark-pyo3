@@ -142,12 +142,7 @@ fn value_to_pyobject(value: Value) -> PyResult<Py<PyAny>> {
             for item in list.iter() {
                 elements.push(value_to_pyobject(item)?);
             }
-            let py_list = PyList::new(
-                py,
-                elements
-                    .into_iter()
-                    .map(|obj| obj.into_bound(py)),
-            )?;
+            let py_list = PyList::new(py, elements.into_iter().map(|obj| obj.into_bound(py)))?;
             Ok(py_list.into_any().unbind())
         });
     }
@@ -159,12 +154,7 @@ fn value_to_pyobject(value: Value) -> PyResult<Py<PyAny>> {
                 elements.push(value_to_pyobject(item)?);
             }
             // Convert to list for backwards compatibility with JSON path
-            let py_list = PyList::new(
-                py,
-                elements
-                    .into_iter()
-                    .map(|obj| obj.into_bound(py)),
-            )?;
+            let py_list = PyList::new(py, elements.into_iter().map(|obj| obj.into_bound(py)))?;
             Ok(py_list.into_any().unbind())
         });
     }
@@ -755,9 +745,7 @@ enum LibraryExtensionKind {
 macro_rules! starlark_extension {
     ($name:ident) => {
         LibraryExtension {
-            kind: LibraryExtensionKind::Upstream(
-                starlark::environment::LibraryExtension::$name,
-            ),
+            kind: LibraryExtensionKind::Upstream(starlark::environment::LibraryExtension::$name),
         }
     };
 }
