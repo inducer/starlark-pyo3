@@ -41,6 +41,7 @@ __all__: Sequence[str] = [
     "LibraryExtension",
     "Lint",
     "Module",
+    "OpaquePythonObject",
     "ResolvedFileSpan",
     "ResolvedPos",
     "ResolvedSpan",
@@ -154,6 +155,10 @@ class LibraryExtension:
     Internal: LibraryExtension
     CallStack: LibraryExtension
     RustDecimal: LibraryExtension
+
+@final
+class OpaquePythonObject:
+    def __new__(cls, obj: object) -> OpaquePythonObject: ...
 
 @final
 class Globals:

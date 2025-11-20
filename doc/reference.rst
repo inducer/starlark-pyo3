@@ -44,6 +44,12 @@ AST
 .. autoclass:: AstLoad
 .. autoclass:: AstModule
 
+
+Values
+------
+
+.. autoclass:: OpaquePythonObject
+
 Globals
 -------
 
