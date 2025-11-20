@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "starlark-pyo3"
-version = "2025.2.4"
+version = "2025.2.5"
 description = "Wraps starlark-rust into Python"
 readme = "README.rst"
 requires-python = ">=3.9"
