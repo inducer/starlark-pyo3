@@ -240,6 +240,47 @@ fn pyobject_to_value<'v>(obj: Bound<PyAny>, heap: &'v Heap) -> PyResult<Value<'v
         }));
     }
 
+    if let Ok(to_rec_bound) = obj.downcast::<ToRecord>() {
+        let to_rec = to_rec_bound.borrow();
+        let fields_func = obj.py().import("dataclasses")?.getattr("fields")?;
+        let fields = fields_func.call1((&to_rec.object,))?;
+
+        let record_constr = convert_anyhow_err(
+            to_rec
+                .module
+                .borrow(obj.py())
+                .0
+                .get(to_rec.type_name.as_str()),
+        )?;
+
+        let module = starlark::environment::Module::new();
+        let mut eval = starlark::eval::Evaluator::new(&module);
+        let sl_kwargs = fields
+            .downcast::<PyTuple>()?
+            .iter()
+            .map(|fld| {
+                let name = fld.getattr("name")?.extract::<String>()?;
+                Ok((
+                    name.clone(),
+                    pyobject_to_value(to_rec.object.bind(obj.py()).getattr(&name)?, eval.heap())?,
+                ))
+            })
+            .collect::<PyResult<Vec<(String, Value)>>>()?;
+
+        let record = convert_starlark_err(
+            eval.eval_function(
+                record_constr.value(),
+                &[],
+                &sl_kwargs
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v.dupe()))
+                    .collect::<Vec<(&str, Value<'_>)>>(),
+            ),
+        )?;
+
+        return Ok(record);
+    }
+
     let json = obj.py().import("json")?;
     let json_str: String = json.getattr("dumps")?.call1((obj,))?.extract()?;
     convert_anyhow_err(serde_to_starlark(
@@ -877,6 +918,36 @@ impl Globals {
         }
 
         Ok(Globals(builder.build()))
+    }
+}
+
+// }}}
+
+// {{{ ToRecord
+
+/// An object that, given a Python :func:`dataclasses.dataclass`__,
+/// upon conversion to Starlark, will return a Starlark
+/// `record
+/// <https://docs.rs/starlark/latest/starlark/environment/enum.LibraryExtension.html#variant.RecordType>`__.
+///
+/// .. versionadded:: 2025.2.6
+#[pyclass]
+struct ToRecord {
+    module: Py<FrozenModule>,
+    type_name: String,
+    object: Py<PyAny>,
+}
+
+#[pymethods]
+impl ToRecord {
+    #[new]
+    #[pyo3(signature = (module, type_name, obj))]
+    fn new(module: Py<FrozenModule>, type_name: &str, obj: Py<PyAny>) -> Self {
+        ToRecord {
+            module: module,
+            type_name: type_name.to_string(),
+            object: obj,
+        }
     }
 }
 
