@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import starlark as sl
 
 
@@ -180,6 +182,22 @@ def test_ext_type_conversion():
     retval = fmod.call("get_custom_types")
     empl = {"id": 1, "name": "John Doe", "salary": 5.0}
     assert retval == ["daisies", empl, empl]
+
+
+@dataclass
+class MyObj:
+    x: int
+
+
+def test_opaue_python_obj():
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+    ast = sl.parse("ext-type.star", "def identity(x): return x")
+    sl.eval(mod, ast, glb)
+    fmod = mod.freeze()
+    myobj = MyObj(5)
+    myobj2 = fmod.call("identity", sl.OpaquePythonObject(myobj))
+    assert myobj is myobj2
 
 # }}}
 

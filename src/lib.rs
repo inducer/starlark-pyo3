@@ -182,6 +182,10 @@ fn value_to_pyobject(value: Value) -> PyResult<Py<PyAny>> {
         });
     }
 
+    if let Some(opaque) = StarlarkOpaquePythonObject::from_value(value) {
+        return Python::attach(|py| Ok(opaque.obj.clone_ref(py)));
+    }
+
     let json_val = convert_anyhow_err(value.to_json())?;
     Python::attach(|py| {
         let json = py.import("json")?;
@@ -228,6 +232,12 @@ fn pyobject_to_value<'v>(obj: Bound<PyAny>, heap: &'v Heap) -> PyResult<Value<'v
             .map(|item| pyobject_to_value(item, heap))
             .collect::<PyResult<Vec<Value<'v>>>>()?;
         return Ok(heap.alloc(AllocList(elements)));
+    }
+
+    if let Ok(opaque) = obj.downcast::<OpaquePythonObject>() {
+        return Ok(heap.alloc(StarlarkOpaquePythonObject {
+            obj: opaque.borrow().0.clone_ref(obj.py()),
+        }));
     }
 
     let json = obj.py().import("json")?;
@@ -872,6 +882,43 @@ impl Globals {
 
 // }}}
 
+// {{{ OpaquePythonObject
+
+#[derive(Debug, ProvidesStaticType, NoSerialize, Allocative)]
+struct StarlarkOpaquePythonObject {
+    #[allocative(skip)]
+    obj: Py<PyAny>,
+}
+starlark_simple_value!(StarlarkOpaquePythonObject);
+
+impl Display for StarlarkOpaquePythonObject {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<opaque python object>")
+    }
+}
+
+#[starlark_value(type = "opaque_python_object")]
+impl<'v> StarlarkValue<'v> for StarlarkOpaquePythonObject {}
+
+/// An 'opaque' Python object that can be passed to Starlark. It cannot be
+/// interacted with from the Starlark side. Upon conversion from Starlark
+/// to Python, the original wrapped object reappears.
+///
+/// .. versionadded:: 2025.2.5
+#[pyclass]
+struct OpaquePythonObject(Py<PyAny>);
+
+#[pymethods]
+impl OpaquePythonObject {
+    #[new]
+    #[pyo3(signature = (obj))]
+    fn new(obj: Py<PyAny>) -> Self {
+        OpaquePythonObject(obj)
+    }
+}
+
+// }}}
+
 // {{{ PythonCallableValue
 
 #[derive(Debug, ProvidesStaticType, NoSerialize, Allocative)]
@@ -1119,6 +1166,7 @@ fn starlark_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<AstModule>()?;
     m.add_class::<LibraryExtension>()?;
     m.add_class::<Globals>()?;
+    m.add_class::<OpaquePythonObject>()?;
     m.add_class::<Module>()?;
     m.add_class::<FrozenModule>()?;
     m.add_class::<FileLoader>()?;
