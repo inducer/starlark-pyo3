@@ -542,6 +542,13 @@ impl DialectTypes {
 /// .. autoattribute:: enable_keyword_only_arguments
 ///
 ///     A :class:`bool`.
+///
+/// .. autoattribute:: enable_positional_only_arguments
+///
+///     A :class:`bool`.
+///
+///     .. versionadded:: 2025.2.6
+///
 /// .. autoattribute:: enable_types
 ///
 ///     A value of type :class:`DialectTypes`.
@@ -590,6 +597,10 @@ impl Dialect {
     #[setter]
     fn enable_keyword_only_arguments(&mut self, value: bool) {
         self.0.enable_keyword_only_arguments = value;
+    }
+    #[setter]
+    fn enable_positional_only_arguments(&mut self, value: bool) {
+        self.0.enable_positional_only_arguments = value;
     }
     #[setter]
     fn enable_types(&mut self, value: DialectTypes) {

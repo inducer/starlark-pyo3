@@ -109,6 +109,7 @@ class Dialect:
     enable_lambda: bool
     enable_load: bool
     enable_keyword_only_arguments: bool
+    enable_positional_only_arguments: bool
     enable_types: DialectTypes
     enable_load_reexport: bool
     enable_top_level_stmt: bool
