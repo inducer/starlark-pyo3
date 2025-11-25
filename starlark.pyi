@@ -158,6 +158,10 @@ class LibraryExtension:
     RustDecimal: LibraryExtension
 
 @final
+class ToRecord:
+    def __new__(cls, module: FrozenModule, type_name: str, obj: object) -> ToRecord: ...
+
+@final
 class OpaquePythonObject:
     def __new__(cls, obj: object) -> OpaquePythonObject: ...
 
