@@ -47,7 +47,6 @@ def load(name: str):
 for lnt in ast.lint():
     print(lnt)
     print(lnt.severity)
-    pass
 
 val = sl.eval(mod, ast, glb, sl.FileLoader(load))
 print(val)
