@@ -65,9 +65,9 @@ d = RustDecimal("7.50") / RustDecimal("2.5")  # decimal / decimal
 
     assert val == [
         decimal.Decimal("2.5"),
-        decimal.Decimal("2"),
+        decimal.Decimal(2),
         decimal.Decimal("2.00"),
-        decimal.Decimal("3"),
+        decimal.Decimal(3),
     ]
 
 
@@ -246,7 +246,7 @@ def test_decimal_constructor_and_errors():
 """
     ast = sl.parse("constructor.star", program)
     result = sl.eval(mod, ast, glb)
-    assert result == [decimal.Decimal("0.125"), decimal.Decimal("5")]
+    assert result == [decimal.Decimal("0.125"), decimal.Decimal(5)]
 
     # Invalid constructors (float and bool should be rejected)
     bad_programs = [
@@ -312,12 +312,12 @@ f_rounded = f.round_dp(0)
         0,  # c_scale: "42" has 0 decimal places
         decimal.Decimal("3.14"),    # d_rounded_2
         decimal.Decimal("3.1416"),  # d_rounded_4
-        decimal.Decimal("3"),       # d_rounded_0
+        decimal.Decimal(3),       # d_rounded_0
         2,  # d_rounded_2_scale
         4,  # d_rounded_4_scale
         0,  # d_rounded_0_scale
-        decimal.Decimal("2"),  # e_rounded: Banker's rounding (2.5 -> 2)
-        decimal.Decimal("4"),  # f_rounded: Banker's rounding (3.5 -> 4)
+        decimal.Decimal(2),  # e_rounded: Banker's rounding (2.5 -> 2)
+        decimal.Decimal(4),  # f_rounded: Banker's rounding (3.5 -> 4)
     ]
 
 

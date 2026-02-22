@@ -28,6 +28,11 @@ documentation = "https://documen.tician.de/starlark-pyo3/"
 [tool.ruff]
 preview = true
 
+[tool.ruff.lint.per-file-ignores]
+"test/test_*.py" = ["S102"]
+"doc/conf.py" = ["S102"]
+"starlark.pyi" = ["PYI052"]
+
 [tool.ruff.lint]
 extend-select = [
     "B",   # flake8-bugbear
