@@ -75,7 +75,7 @@ class EvalSeverity:
     Disabled: EvalSeverity
 
     @override
-    def __eq__(self, other: object) -> bool: ...
+    def __eq__(self, other: object, /) -> bool: ...
 
 @final
 class Lint:
