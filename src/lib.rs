@@ -85,7 +85,12 @@ fn serde_to_starlark(x: serde_json::Value, heap: &Heap) -> anyhow::Result<Value<
         serde_json::Value::Null => Ok(Value::new_none()),
         serde_json::Value::Bool(x) => Ok(Value::new_bool(x)),
         serde_json::Value::Number(x) => {
+            // Integer branches must come before f64: a value that fits in i64
+            // (in particular, a negative that fails as_u64) needs to land as a
+            // Starlark int, not be widened to float.
             if let Some(x) = x.as_u64() {
+                Ok(heap.alloc(x))
+            } else if let Some(x) = x.as_i64() {
                 Ok(heap.alloc(x))
             } else if let Some(x) = x.as_f64() {
                 Ok(heap.alloc(x))
