@@ -72,6 +72,43 @@ def test_python_callable_with_kwargs():
     assert val == 10
 
 
+def test_python_callable_negative_int_preserves_type():
+    # A registered Python callable that returns an int must produce an int on
+    # the Starlark -> Python boundary, including negatives. The JSON-based
+    # value conversion needs an i64 branch; without it, negatives fall
+    # through to f64 and emerge on the Python side as float.
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+
+    captured: dict[str, int] = {}
+
+    def return_int(x: int) -> int:
+        captured["x"] = x
+        return x
+
+    mod.add_callable("return_int", return_int)
+
+    cases: tuple[tuple[str, int], ...] = (
+        ("-(2 * 1024 * 1024 * 1024)", -(2 * 1024 * 1024 * 1024)),
+        ("-100", -100),
+        ("-1", -1),
+        ("0", 0),
+        ("1", 1),
+        ("100", 100),
+        ("(2 * 1024 * 1024 * 1024) - 1", (2 * 1024 * 1024 * 1024) - 1),
+    )
+    for literal, expected in cases:
+        ast = sl.parse("neg-int.star", f"return_int({literal})")
+        result = sl.eval(mod, ast, glb)
+        assert result == expected
+        assert isinstance(result, int) and not isinstance(result, bool), (
+            f"expected int, got {type(result).__name__}={result!r}"
+        )
+        assert isinstance(captured["x"], int) and not isinstance(captured["x"], bool), (
+            f"callable received {type(captured['x']).__name__}={captured['x']!r}"
+        )
+
+
 ADD_STAR = """
 def add(x, y, a, b):
     if a != "a":
