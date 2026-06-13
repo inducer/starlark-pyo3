@@ -163,7 +163,13 @@ class Globals:
 
 @final
 class FrozenModule:
-    def call(self, name: str, *args: object, **kwargs: object) -> object: ...
+    def call(
+        self,
+        name: str,
+        *args: object,
+        check_cancelled: Callable[[], bool] | None = None,
+        **kwargs: object,
+    ) -> object: ...
 
 @final
 class Module:
@@ -182,4 +188,6 @@ def eval(
     ast: AstModule,
     globals: Globals,
     file_loader: FileLoader | None = None,
+    *,
+    check_cancelled: Callable[[], bool] | None = None,
 ) -> object: ...
