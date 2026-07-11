@@ -1046,6 +1046,77 @@ impl Module {
 
 // }}}
 
+// {{{ EvalOptions
+
+/// Bundle of per-evaluation options passed to :func:`eval_with` and
+/// :meth:`FrozenModule.call_with`. All fields are keyword-only in the
+/// constructor and read-only afterwards. Instances are safe to share
+/// across evaluations.
+///
+/// .. autoattribute:: check_cancelled
+///
+///     Optional zero-argument callable invoked periodically during
+///     evaluation (roughly every 1000 bytecode instructions). A truthy
+///     return aborts evaluation with :class:`StarlarkError`; a raised
+///     Python exception propagates to the caller. The callback must
+///     not access the *module* passed to :func:`eval_with`: the module
+///     is locked during evaluation and re-entry will deadlock.
+///     Cancellation is scoped to a single :func:`eval_with` /
+///     :meth:`FrozenModule.call_with` call; nested :func:`eval_with`
+///     calls (e.g. from a :class:`FileLoader`) need their own callback.
+/// .. autoattribute:: max_callstack_size
+///
+///     Optional positive integer cap on Starlark call stack depth.
+#[pyclass(frozen)]
+struct EvalOptions {
+    check_cancelled: Option<Py<PyAny>>,
+    max_callstack_size: Option<usize>,
+}
+
+#[pymethods]
+impl EvalOptions {
+    #[new]
+    #[pyo3(
+        signature = (*, check_cancelled=None, max_callstack_size=None),
+        text_signature = "(*, check_cancelled: Callable[[], bool] | None = None, max_callstack_size: int | None = None) -> None"
+    )]
+    fn py_new(
+        py: Python<'_>,
+        check_cancelled: Option<Py<PyAny>>,
+        max_callstack_size: Option<usize>,
+    ) -> PyResult<Self> {
+        if let Some(ref cb) = check_cancelled {
+            if !cb.bind(py).is_callable() {
+                return Err(pyo3::exceptions::PyTypeError::new_err(
+                    "check_cancelled must be callable",
+                ));
+            }
+        }
+        if let Some(sz) = max_callstack_size {
+            if sz == 0 {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "max_callstack_size must be positive",
+                ));
+            }
+        }
+        Ok(Self {
+            check_cancelled,
+            max_callstack_size,
+        })
+    }
+
+    #[getter]
+    fn check_cancelled(&self, py: Python<'_>) -> Option<Py<PyAny>> {
+        self.check_cancelled.as_ref().map(|cb| cb.clone_ref(py))
+    }
+    #[getter]
+    fn max_callstack_size(&self) -> Option<usize> {
+        self.max_callstack_size
+    }
+}
+
+// }}}
+
 // {{{ FrozenModule
 
 /// .. automethod:: call
@@ -1186,6 +1257,7 @@ fn starlark_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Module>()?;
     m.add_class::<FrozenModule>()?;
     m.add_class::<FileLoader>()?;
+    m.add_class::<EvalOptions>()?;
     m.add_wrapped(wrap_pyfunction!(parse))?;
     m.add_wrapped(wrap_pyfunction!(eval))?;
     m.add("StarlarkError", m.py().get_type::<StarlarkError>())?;
