@@ -33,6 +33,7 @@ __all__: Sequence[str] = [
     "Dialect",
     "DialectTypes",
     "Error",
+    "EvalOptions",
     "EvalSeverity",
     "FileLoader",
     "FrozenModule",
@@ -160,6 +161,20 @@ class Globals:
     def standard() -> Globals: ...
     @staticmethod
     def extended_by(extensions: list[LibraryExtension]) -> Globals: ...
+
+@final
+class EvalOptions:
+    @property
+    def check_cancelled(self) -> Callable[[], bool] | None: ...
+    @property
+    def max_callstack_size(self) -> int | None: ...
+
+    def __new__(
+        cls,
+        *,
+        check_cancelled: Callable[[], bool] | None = None,
+        max_callstack_size: int | None = None,
+    ) -> EvalOptions: ...
 
 @final
 class FrozenModule:

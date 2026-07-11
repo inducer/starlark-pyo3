@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+import pytest
+
 import starlark as sl
 
 
@@ -235,6 +237,35 @@ def test_opaue_python_obj():
     myobj = MyObj(5)
     myobj2 = fmod.call("identity", sl.OpaquePythonObject(myobj))
     assert myobj is myobj2
+
+# }}}
+
+
+# {{{ evaluation options
+
+def test_check_cancelled_rejects_non_callable():
+    with pytest.raises(TypeError, match="callable"):
+        # Intentional non-callable: verifies runtime rejection at
+        # EvalOptions construction.
+        sl.EvalOptions(check_cancelled=42)  # pyright: ignore[reportArgumentType]
+
+
+def test_eval_options_max_callstack_size_zero_rejected():
+    with pytest.raises(ValueError, match="positive"):
+        sl.EvalOptions(max_callstack_size=0)
+
+
+def test_eval_options_getters_readable():
+    def cb() -> bool:
+        return False
+
+    opts = sl.EvalOptions(check_cancelled=cb, max_callstack_size=42)
+    assert opts.check_cancelled is cb
+    assert opts.max_callstack_size == 42
+
+    empty = sl.EvalOptions()
+    assert empty.check_cancelled is None
+    assert empty.max_callstack_size is None
 
 # }}}
 
