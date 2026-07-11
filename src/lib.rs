@@ -26,7 +26,6 @@ extern crate starlark;
 extern crate starlark_derive;
 extern crate thiserror;
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::sync::Mutex;
@@ -1055,31 +1054,17 @@ struct FrozenModule(starlark::environment::FrozenModule);
 
 #[pymethods]
 impl FrozenModule {
-    /// Accepts the same *check_cancelled* keyword argument as :func:`eval`.
-    /// That name is reserved here and cannot be passed as a Starlark keyword
-    /// argument to the called function.
-    ///
     /// .. versionadded:: 2025.2.2
     /// .. versionchanged:: 2025.2.3
     ///
     ///     Added support for keyword arguments.
-    #[pyo3(signature = (name, *args, check_cancelled=None, **kwargs))]
+    #[pyo3(signature = (name, *args, **kwargs))]
     fn call(
         slf: &Bound<'_, FrozenModule>,
         name: &str,
         args: &Bound<'_, PyTuple>,
-        check_cancelled: Option<Py<PyAny>>,
         kwargs: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Py<PyAny>> {
-        if let Some(ref cb) = check_cancelled {
-            if !cb.bind(slf.py()).is_callable() {
-                return Err(pyo3::exceptions::PyTypeError::new_err(
-                    "check_cancelled must be callable",
-                ));
-            }
-        }
-        let cancel_state = check_cancelled.map(CancelledState::new);
-
         let function = convert_anyhow_err(slf.get().0.get(name))?;
         let module = starlark::environment::Module::new();
         let sl_args = args
@@ -1094,25 +1079,16 @@ impl FrozenModule {
             None => Vec::new(),
         };
         let mut evaluator = starlark::eval::Evaluator::new(&module);
-        if let Some(state) = cancel_state.as_ref() {
-            evaluator.set_check_cancelled(Box::new(move || state.check()));
-        }
-        let result = convert_starlark_err(evaluator.eval_function(
-            function.value(),
-            &sl_args,
-            &sl_kwargs
-                .iter()
-                .map(|(k, v)| (k.as_str(), v.dupe()))
-                .collect::<Vec<(&str, Value<'_>)>>(),
-        ))
-        .and_then(value_to_pyobject);
-
-        if let Some(state) = cancel_state.as_ref() {
-            if let Some(err) = state.take_error() {
-                return Err(err);
-            }
-        }
-        result
+        value_to_pyobject(convert_starlark_err(
+            evaluator.eval_function(
+                function.value(),
+                &sl_args,
+                &sl_kwargs
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v.dupe()))
+                    .collect::<Vec<(&str, Value<'_>)>>(),
+            ),
+        )?)
     }
 }
 
@@ -1154,80 +1130,18 @@ impl starlark::eval::FileLoader for FileLoader {
 
 // {{{ eval
 
-// Holds a Python `check_cancelled` callback plus a slot for an exception
-// raised inside it. The closure handed to `Evaluator::set_check_cancelled`
-// must return a `bool`, so a raising callback is reported by storing the
-// `PyErr` here and treating the call as a cancel. The caller pulls the
-// stashed exception out after evaluation and re-raises it in preference
-// to the generic "Evaluation cancelled" error.
-struct CancelledState {
-    callback: Py<PyAny>,
-    captured: RefCell<Option<PyErr>>,
-}
-
-impl CancelledState {
-    fn new(callback: Py<PyAny>) -> Self {
-        Self {
-            callback,
-            captured: RefCell::new(None),
-        }
-    }
-
-    fn check(&self) -> bool {
-        if self.captured.borrow().is_some() {
-            return true;
-        }
-        Python::attach(|py| {
-            match self
-                .callback
-                .call0(py)
-                .and_then(|ret| ret.bind(py).is_truthy())
-            {
-                Ok(b) => b,
-                Err(e) => {
-                    *self.captured.borrow_mut() = Some(e);
-                    true
-                }
-            }
-        })
-    }
-
-    fn take_error(&self) -> Option<PyErr> {
-        self.captured.borrow_mut().take()
-    }
-}
-
-/// :arg check_cancelled: An optional zero-argument callable invoked
-///     periodically (roughly every 1000 bytecode instructions). If it returns
-///     a truthy value, evaluation aborts and :class:`StarlarkError` is raised.
-///     If it raises a Python exception, evaluation aborts and that exception
-///     propagates to the caller. The callback must not access *module*:
-///     the module is locked during evaluation and re-entry will deadlock.
-///     Cancellation is scoped to this :func:`eval` call; nested
-///     :func:`eval` calls (e.g. from a :class:`FileLoader`) need their
-///     own callback.
 /// :returns: the value returned by the evaluation, after :ref:`object-conversion`.
 #[pyfunction]
 #[pyo3(
-    signature = (module, ast, globals, file_loader=None, *, check_cancelled=None),
-    text_signature = "(module: Module, ast: AstModule, globals: Globals, file_loader: FileLoader | None = None, *, check_cancelled: Callable[[], bool] | None = None) -> object"
+    signature = (module, ast, globals, file_loader=None),
+    text_signature = "(module: Module, ast: AstModule, globals: Globals, file_loader: FileLoader | None = None) -> object"
 )]
 fn eval(
     module: &mut Module,
     ast: &Bound<AstModule>,
     globals: &Globals,
     file_loader: Option<&Bound<FileLoader>>,
-    check_cancelled: Option<Py<PyAny>>,
 ) -> PyResult<Py<PyAny>> {
-    if let Some(ref cb) = check_cancelled {
-        if !cb.bind(ast.py()).is_callable() {
-            return Err(pyo3::exceptions::PyTypeError::new_err(
-                "check_cancelled must be callable",
-            ));
-        }
-    }
-    let cancel_state = check_cancelled.map(CancelledState::new);
-
     let tail = |evaluator: &mut starlark::eval::Evaluator| {
         // Stupid: eval_module consumes the AST. Clone it.
         value_to_pyobject(convert_starlark_err(
@@ -1236,31 +1150,18 @@ fn eval(
     };
 
     let mod_locked = module.0.lock_py_attached(ast.py()).unwrap();
-    let result = match file_loader {
+    match file_loader {
         Some(loader_cell) => {
             let loader_ref = loader_cell.borrow();
             let mut evaluator = starlark::eval::Evaluator::new(&mod_locked);
             evaluator.set_loader(&*loader_ref);
-            if let Some(state) = cancel_state.as_ref() {
-                evaluator.set_check_cancelled(Box::new(move || state.check()));
-            }
             tail(&mut evaluator)
         }
         None => {
             let mut evaluator = starlark::eval::Evaluator::new(&mod_locked);
-            if let Some(state) = cancel_state.as_ref() {
-                evaluator.set_check_cancelled(Box::new(move || state.check()));
-            }
             tail(&mut evaluator)
         }
-    };
-
-    if let Some(state) = cancel_state.as_ref() {
-        if let Some(err) = state.take_error() {
-            return Err(err);
-        }
     }
-    result
 }
 
 // }}}
