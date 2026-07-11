@@ -34,6 +34,7 @@ __all__: Sequence[str] = [
     "DialectTypes",
     "Error",
     "EvalOptions",
+    "EvalResult",
     "EvalSeverity",
     "FileLoader",
     "FrozenModule",
@@ -48,6 +49,7 @@ __all__: Sequence[str] = [
     "ResolvedSpan",
     "StarlarkError",
     "eval",
+    "eval_with",
     "parse",
 ]
 
@@ -177,8 +179,21 @@ class EvalOptions:
     ) -> EvalOptions: ...
 
 @final
+class EvalResult:
+    @property
+    def value(self) -> object: ...
+
+@final
 class FrozenModule:
     def call(self, name: str, *args: object, **kwargs: object) -> object: ...
+    def call_with(
+        self,
+        options: EvalOptions,
+        name: str,
+        /,
+        *args: object,
+        **kwargs: object,
+    ) -> EvalResult: ...
 
 @final
 class Module:
@@ -198,3 +213,11 @@ def eval(
     globals: Globals,
     file_loader: FileLoader | None = None,
 ) -> object: ...
+def eval_with(
+    options: EvalOptions,
+    module: Module,
+    ast: AstModule,
+    globals: Globals,
+    /,
+    file_loader: FileLoader | None = None,
+) -> EvalResult: ...

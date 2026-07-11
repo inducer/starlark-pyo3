@@ -112,5 +112,8 @@ Loaders
 Parsing and Evaluation
 ----------------------
 
+.. autoclass:: EvalOptions
+.. autoclass:: EvalResult
 .. autofunction:: parse
 .. autofunction:: eval
+.. autofunction:: eval_with

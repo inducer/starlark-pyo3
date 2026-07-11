@@ -26,6 +26,7 @@ extern crate starlark;
 extern crate starlark_derive;
 extern crate thiserror;
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::sync::Mutex;
@@ -1120,6 +1121,7 @@ impl EvalOptions {
 // {{{ FrozenModule
 
 /// .. automethod:: call
+/// .. automethod:: call_with
 #[pyclass(frozen)]
 struct FrozenModule(starlark::environment::FrozenModule);
 
@@ -1136,30 +1138,24 @@ impl FrozenModule {
         args: &Bound<'_, PyTuple>,
         kwargs: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Py<PyAny>> {
-        let function = convert_anyhow_err(slf.get().0.get(name))?;
-        let module = starlark::environment::Module::new();
-        let sl_args = args
-            .iter()
-            .map(|item| pyobject_to_value(item, module.heap()))
-            .collect::<PyResult<Vec<Value<'_>>>>()?;
-        let sl_kwargs = match kwargs {
-            Some(kwarg_seq) => kwarg_seq
-                .iter()
-                .map(|(k, v)| Ok((k.extract::<String>()?, pyobject_to_value(v, module.heap())?)))
-                .collect::<PyResult<Vec<(String, Value<'_>)>>>()?,
-            None => Vec::new(),
-        };
-        let mut evaluator = starlark::eval::Evaluator::new(&module);
-        value_to_pyobject(convert_starlark_err(
-            evaluator.eval_function(
-                function.value(),
-                &sl_args,
-                &sl_kwargs
-                    .iter()
-                    .map(|(k, v)| (k.as_str(), v.dupe()))
-                    .collect::<Vec<(&str, Value<'_>)>>(),
-            ),
-        )?)
+        frozen_module_call(slf, name, args, kwargs, None)
+    }
+
+    /// Like :meth:`call`, but takes an :class:`EvalOptions` bundle carrying
+    /// resource limits and cooperative cancellation, and returns an
+    /// :class:`EvalResult`. Because options are explicit, ``**kwargs`` is
+    /// passed through unchanged to the Starlark callee — there are no
+    /// reserved keyword names.
+    #[pyo3(signature = (options, name, /, *args, **kwargs))]
+    fn call_with(
+        slf: &Bound<'_, FrozenModule>,
+        options: &Bound<'_, EvalOptions>,
+        name: &str,
+        args: &Bound<'_, PyTuple>,
+        kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<EvalResult> {
+        let value = frozen_module_call(slf, name, args, kwargs, Some(options.get()))?;
+        Ok(EvalResult { value })
     }
 }
 
@@ -1201,7 +1197,155 @@ impl starlark::eval::FileLoader for FileLoader {
 
 // {{{ eval
 
+// Holds a Python `check_cancelled` callback plus a slot for an exception
+// raised inside it. The closure handed to `Evaluator::set_check_cancelled`
+// must return a `bool`, so a raising callback is reported by storing the
+// `PyErr` here and treating the call as a cancel. The caller pulls the
+// stashed exception out after evaluation and re-raises it in preference
+// to the generic "Evaluation cancelled" error.
+struct CancelledState {
+    callback: Py<PyAny>,
+    captured: RefCell<Option<PyErr>>,
+}
+
+impl CancelledState {
+    fn new(callback: Py<PyAny>) -> Self {
+        Self {
+            callback,
+            captured: RefCell::new(None),
+        }
+    }
+
+    fn check(&self) -> bool {
+        if self.captured.borrow().is_some() {
+            return true;
+        }
+        Python::attach(|py| {
+            match self
+                .callback
+                .call0(py)
+                .and_then(|ret| ret.bind(py).is_truthy())
+            {
+                Ok(b) => b,
+                Err(e) => {
+                    *self.captured.borrow_mut() = Some(e);
+                    true
+                }
+            }
+        })
+    }
+
+    fn take_error(&self) -> Option<PyErr> {
+        self.captured.borrow_mut().take()
+    }
+}
+
+fn apply_eval_opts<'v, 'a, 'e>(
+    evaluator: &mut starlark::eval::Evaluator<'v, 'a, 'e>,
+    options: Option<&EvalOptions>,
+    cancel_state: Option<&'a CancelledState>,
+) -> PyResult<()> {
+    if let Some(opts) = options {
+        if let Some(sz) = opts.max_callstack_size {
+            convert_anyhow_err(evaluator.set_max_callstack_size(sz))?;
+        }
+    }
+    if let Some(state) = cancel_state {
+        evaluator.set_check_cancelled(Box::new(move || state.check()));
+    }
+    Ok(())
+}
+
+fn frozen_module_call(
+    slf: &Bound<'_, FrozenModule>,
+    name: &str,
+    args: &Bound<'_, PyTuple>,
+    kwargs: Option<&Bound<'_, PyDict>>,
+    options: Option<&EvalOptions>,
+) -> PyResult<Py<PyAny>> {
+    let cancel_state = options
+        .and_then(|o| o.check_cancelled.as_ref())
+        .map(|cb| CancelledState::new(cb.clone_ref(slf.py())));
+
+    let function = convert_anyhow_err(slf.get().0.get(name))?;
+    let module = starlark::environment::Module::new();
+    let sl_args = args
+        .iter()
+        .map(|item| pyobject_to_value(item, module.heap()))
+        .collect::<PyResult<Vec<Value<'_>>>>()?;
+    let sl_kwargs = match kwargs {
+        Some(kwarg_seq) => kwarg_seq
+            .iter()
+            .map(|(k, v)| Ok((k.extract::<String>()?, pyobject_to_value(v, module.heap())?)))
+            .collect::<PyResult<Vec<(String, Value<'_>)>>>()?,
+        None => Vec::new(),
+    };
+    let mut evaluator = starlark::eval::Evaluator::new(&module);
+    apply_eval_opts(&mut evaluator, options, cancel_state.as_ref())?;
+    let result = convert_starlark_err(evaluator.eval_function(
+        function.value(),
+        &sl_args,
+        &sl_kwargs
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.dupe()))
+            .collect::<Vec<(&str, Value<'_>)>>(),
+    ))
+    .and_then(value_to_pyobject);
+
+    if let Some(state) = cancel_state.as_ref() {
+        if let Some(err) = state.take_error() {
+            return Err(err);
+        }
+    }
+    result
+}
+
+fn eval_impl(
+    module: &mut Module,
+    ast: &Bound<AstModule>,
+    globals: &Globals,
+    file_loader: Option<&Bound<FileLoader>>,
+    options: Option<&EvalOptions>,
+) -> PyResult<Py<PyAny>> {
+    let cancel_state = options
+        .and_then(|o| o.check_cancelled.as_ref())
+        .map(|cb| CancelledState::new(cb.clone_ref(ast.py())));
+
+    let tail = |evaluator: &mut starlark::eval::Evaluator| {
+        // Stupid: eval_module consumes the AST. Clone it.
+        value_to_pyobject(convert_starlark_err(
+            evaluator.eval_module(ast.borrow().0.clone(), &globals.0),
+        )?)
+    };
+
+    let mod_locked = module.0.lock_py_attached(ast.py()).unwrap();
+    let result = match file_loader {
+        Some(loader_cell) => {
+            let loader_ref = loader_cell.borrow();
+            let mut evaluator = starlark::eval::Evaluator::new(&mod_locked);
+            evaluator.set_loader(&*loader_ref);
+            apply_eval_opts(&mut evaluator, options, cancel_state.as_ref())?;
+            tail(&mut evaluator)
+        }
+        None => {
+            let mut evaluator = starlark::eval::Evaluator::new(&mod_locked);
+            apply_eval_opts(&mut evaluator, options, cancel_state.as_ref())?;
+            tail(&mut evaluator)
+        }
+    };
+
+    if let Some(state) = cancel_state.as_ref() {
+        if let Some(err) = state.take_error() {
+            return Err(err);
+        }
+    }
+    result
+}
+
 /// :returns: the value returned by the evaluation, after :ref:`object-conversion`.
+///
+/// If you need to pass evaluator options (cooperative cancellation,
+/// resource limits), use :func:`eval_with` instead.
 #[pyfunction]
 #[pyo3(
     signature = (module, ast, globals, file_loader=None),
@@ -1213,25 +1357,55 @@ fn eval(
     globals: &Globals,
     file_loader: Option<&Bound<FileLoader>>,
 ) -> PyResult<Py<PyAny>> {
-    let tail = |evaluator: &mut starlark::eval::Evaluator| {
-        // Stupid: eval_module consumes the AST. Clone it.
-        value_to_pyobject(convert_starlark_err(
-            evaluator.eval_module(ast.borrow().0.clone(), &globals.0),
-        )?)
-    };
+    eval_impl(module, ast, globals, file_loader, None)
+}
 
-    let mod_locked = module.0.lock_py_attached(ast.py()).unwrap();
-    match file_loader {
-        Some(loader_cell) => {
-            let loader_ref = loader_cell.borrow();
-            let mut evaluator = starlark::eval::Evaluator::new(&mod_locked);
-            evaluator.set_loader(&*loader_ref);
-            tail(&mut evaluator)
-        }
-        None => {
-            let mut evaluator = starlark::eval::Evaluator::new(&mod_locked);
-            tail(&mut evaluator)
-        }
+/// Like :func:`eval`, but takes an :class:`EvalOptions` bundle carrying
+/// resource limits and cooperative cancellation, and returns an
+/// :class:`EvalResult` wrapping the evaluation's return value.
+///
+/// :arg options: An :class:`EvalOptions` bundle. See :class:`EvalOptions`
+///     for the semantics of each field.
+/// :returns: An :class:`EvalResult` whose :attr:`~EvalResult.value` is
+///     the evaluation's return, after :ref:`object-conversion`.
+#[pyfunction]
+#[pyo3(
+    signature = (options, module, ast, globals, /, file_loader=None),
+    text_signature = "(options: EvalOptions, module: Module, ast: AstModule, globals: Globals, /, file_loader: FileLoader | None = None) -> EvalResult"
+)]
+fn eval_with(
+    options: &Bound<EvalOptions>,
+    module: &mut Module,
+    ast: &Bound<AstModule>,
+    globals: &Globals,
+    file_loader: Option<&Bound<FileLoader>>,
+) -> PyResult<EvalResult> {
+    let value = eval_impl(module, ast, globals, file_loader, Some(options.get()))?;
+    Ok(EvalResult { value })
+}
+
+// }}}
+
+// {{{ EvalResult
+
+/// Rich result of an evaluation returned by :func:`eval_with` and
+/// :meth:`FrozenModule.call_with`. Currently wraps only the return
+/// value; future post-eval readouts (tick counts, profile output,
+/// coverage) will land as additional read-only fields.
+///
+/// .. autoattribute:: value
+///
+///     The value returned by the evaluation, after :ref:`object-conversion`.
+#[pyclass(frozen)]
+struct EvalResult {
+    value: Py<PyAny>,
+}
+
+#[pymethods]
+impl EvalResult {
+    #[getter]
+    fn value(&self, py: Python<'_>) -> Py<PyAny> {
+        self.value.clone_ref(py)
     }
 }
 
@@ -1258,8 +1432,10 @@ fn starlark_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<FrozenModule>()?;
     m.add_class::<FileLoader>()?;
     m.add_class::<EvalOptions>()?;
+    m.add_class::<EvalResult>()?;
     m.add_wrapped(wrap_pyfunction!(parse))?;
     m.add_wrapped(wrap_pyfunction!(eval))?;
+    m.add_wrapped(wrap_pyfunction!(eval_with))?;
     m.add("StarlarkError", m.py().get_type::<StarlarkError>())?;
 
     Ok(())

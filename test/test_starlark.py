@@ -243,11 +243,106 @@ def test_opaue_python_obj():
 
 # {{{ evaluation options
 
+INFINITE_LOOP_STAR = """
+def busy():
+    x = 0
+    for _ in range(1000000000):
+        x = x + 1
+    return x
+busy()
+"""
+
+
+RECURSE_STAR = """
+def f(n):
+    if n == 0:
+        return 0
+    return f(n - 1) + 1
+f(30)
+"""
+
+
+def test_check_cancelled_aborts_evaluation():
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+    ast = sl.parse("cancel.star", INFINITE_LOOP_STAR)
+
+    counter: dict[str, int] = {"n": 0}
+
+    def cancel():
+        counter["n"] += 1
+        return counter["n"] >= 1
+
+    with pytest.raises(sl.StarlarkError):
+        sl.eval_with(sl.EvalOptions(check_cancelled=cancel), mod, ast, glb)
+
+    assert counter["n"] >= 1
+
+
+def test_check_cancelled_never_triggers_for_quick_eval():
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+    ast = sl.parse("quick.star", "1 + 2")
+
+    counter: dict[str, int] = {"n": 0}
+
+    def cancel():
+        counter["n"] += 1
+        return False
+
+    result = sl.eval_with(sl.EvalOptions(check_cancelled=cancel), mod, ast, glb)
+    assert result.value == 3
+    assert counter["n"] == 0
+
+
+def test_check_cancelled_aborts_on_truthy_int():
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+    ast = sl.parse("truthy.star", INFINITE_LOOP_STAR)
+
+    def cancel():
+        return 1
+
+    with pytest.raises(sl.StarlarkError):
+        # Intentional non-bool return: verifies is_truthy semantics.
+        sl.eval_with(sl.EvalOptions(check_cancelled=cancel), mod, ast, glb)  # pyright: ignore[reportArgumentType]
+
+
 def test_check_cancelled_rejects_non_callable():
     with pytest.raises(TypeError, match="callable"):
         # Intentional non-callable: verifies runtime rejection at
         # EvalOptions construction.
         sl.EvalOptions(check_cancelled=42)  # pyright: ignore[reportArgumentType]
+
+
+def test_check_cancelled_propagates_python_exception():
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+    ast = sl.parse("cancel-raises.star", INFINITE_LOOP_STAR)
+
+    class BoomError(RuntimeError):
+        pass
+
+    def cancel():
+        raise BoomError("kaboom")
+
+    with pytest.raises(BoomError, match="kaboom"):
+        sl.eval_with(sl.EvalOptions(check_cancelled=cancel), mod, ast, glb)
+
+
+def test_max_callstack_size_limits_recursion():
+    # Positive control: depth 30 completes under starlark-rust's default
+    # 50-frame call stack limit, so a plain sl.eval() succeeds.
+    glb = sl.Globals.standard()
+    ctrl_mod = sl.Module()
+    ctrl_ast = sl.parse("recurse.star", RECURSE_STAR)
+    assert sl.eval(ctrl_mod, ctrl_ast, glb) == 30
+
+    # With max_callstack_size=10, the same script overflows the imposed limit.
+    mod = sl.Module()
+    ast = sl.parse("recurse.star", RECURSE_STAR)
+    with pytest.raises(sl.StarlarkError, match="call stack overflow"):
+        sl.eval_with(sl.EvalOptions(max_callstack_size=10), mod, ast, glb)
 
 
 def test_eval_options_max_callstack_size_zero_rejected():
@@ -266,6 +361,115 @@ def test_eval_options_getters_readable():
     empty = sl.EvalOptions()
     assert empty.check_cancelled is None
     assert empty.max_callstack_size is None
+
+
+FROZEN_LOOP_STAR = """
+def loop():
+    for _ in range(1000000000):
+        pass
+    return 0
+"""
+
+
+FROZEN_RECURSE_STAR = """
+def f(n):
+    if n == 0:
+        return 0
+    return f(n - 1) + 1
+"""
+
+
+def test_frozen_module_call_with_check_cancelled_aborts():
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+    sl.eval(mod, sl.parse("frozen-loop.star", FROZEN_LOOP_STAR), glb)
+    fmod = mod.freeze()
+
+    counter: dict[str, int] = {"n": 0}
+
+    def cancel():
+        counter["n"] += 1
+        return counter["n"] >= 1
+
+    with pytest.raises(sl.StarlarkError):
+        fmod.call_with(sl.EvalOptions(check_cancelled=cancel), "loop")
+    assert counter["n"] >= 1
+
+
+def test_frozen_module_call_with_max_callstack_size_limits_recursion():
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+    sl.eval(mod, sl.parse("frozen-recurse.star", FROZEN_RECURSE_STAR), glb)
+    fmod = mod.freeze()
+
+    # Positive control: depth 30 completes under the default 50-frame limit.
+    assert fmod.call_with(sl.EvalOptions(), "f", 30).value == 30
+
+    # With max_callstack_size=10, the same call overflows.
+    with pytest.raises(sl.StarlarkError, match="call stack overflow"):
+        fmod.call_with(sl.EvalOptions(max_callstack_size=10), "f", 30)
+
+
+def test_frozen_module_call_with_propagates_python_exception():
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+    sl.eval(mod, sl.parse("frozen-loop2.star", FROZEN_LOOP_STAR), glb)
+    fmod = mod.freeze()
+
+    class BoomError(RuntimeError):
+        pass
+
+    def cancel():
+        raise BoomError("kaboom")
+
+    with pytest.raises(BoomError, match="kaboom"):
+        fmod.call_with(sl.EvalOptions(check_cancelled=cancel), "loop")
+
+
+NAMESPACE_STAR = """
+def f(check_cancelled, max_callstack_size, options, name):
+    return check_cancelled + max_callstack_size + options + name
+"""
+
+
+def test_frozen_module_call_with_kwargs_pristine():
+    # Every kwarg name that would collide on a flat-kwarg design must
+    # flow through to the Starlark callee unmodified.
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+    sl.eval(mod, sl.parse("nc.star", NAMESPACE_STAR), glb)
+    fmod = mod.freeze()
+
+    result = fmod.call_with(
+        sl.EvalOptions(),
+        "f",
+        check_cancelled=1,
+        max_callstack_size=2,
+        options=3,
+        name=4,
+    )
+    assert result.value == 10
+
+
+def test_eval_with_returns_eval_result():
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+    ast = sl.parse("basic.star", "1 + 2")
+
+    result = sl.eval_with(sl.EvalOptions(), mod, ast, glb)
+    assert isinstance(result, sl.EvalResult)
+    assert result.value == 3
+
+
+def test_frozen_module_call_with_returns_eval_result():
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+    sl.eval(mod, sl.parse("basic.star", "def f(): return 42"), glb)
+    fmod = mod.freeze()
+
+    result = fmod.call_with(sl.EvalOptions(), "f")
+    assert isinstance(result, sl.EvalResult)
+    assert result.value == 42
 
 # }}}
 
