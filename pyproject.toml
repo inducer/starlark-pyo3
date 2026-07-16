@@ -8,7 +8,7 @@ version = "2026.1"
 description = "Wraps starlark-rust into Python"
 readme = "README.rst"
 requires-python = ">=3.9"
-license = {file = "LICENSE"}
+license = "Apache-2.0"
 authors = [
     { name = "Andreas Kloeckner", email = "inform@tiker.net" }
     ]
@@ -87,4 +87,3 @@ pythonPlatform = "All"
 extend-ignore-re = [
   "(?Rm)^.*(#|//)\\s*spellchecker:\\s*disable-line$"
 ]
-
