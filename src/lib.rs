@@ -289,43 +289,121 @@ fn value_to_pyobject<'v>(value: Value<'v>, context: &ConversionContext<'v>) -> P
     })
 }
 
+/// Tracks the Python containers that :func:`pyobject_to_value` is currently
+/// converting.
+///
+/// Same purpose as :struct:`ConversionContext`, but for the Python ->
+/// Starlark direction. Cyclic Python objects (e.g. `l = []; l.append(l)`) used
+/// to overflow the native stack and crash the interpreter when converted; the
+/// list/dict iterators used in the recursion do not trigger CPython's own
+/// recursion checks. Containers are keyed by object address (`id()`), which is
+/// stable for the duration of the conversion because every object on the
+/// active path is still referenced by its ancestors.
+struct PyConversionContext {
+    /// Addresses of the containers on the active conversion path.
+    active: RefCell<HashSet<usize>>,
+    /// Number of containers currently in conversion.
+    depth: Cell<usize>,
+}
+
+impl PyConversionContext {
+    fn new() -> Self {
+        PyConversionContext {
+            active: RefCell::new(HashSet::new()),
+            depth: Cell::new(0),
+        }
+    }
+}
+
+/// RAII guard for :struct:`PyConversionContext`; see :struct:`ContainerGuard`.
+struct PyContainerGuard<'a> {
+    context: &'a PyConversionContext,
+    key: usize,
+}
+
+impl<'a> Drop for PyContainerGuard<'a> {
+    fn drop(&mut self) {
+        self.context.active.borrow_mut().remove(&self.key);
+        self.context.depth.set(self.context.depth.get() - 1);
+    }
+}
+
+/// Marks a Python *obj* as in-conversion for :func:`pyobject_to_value`;
+/// see :func:`enter_container` for the failure modes.
+fn enter_py_container<'a>(
+    obj: &Bound<'_, PyAny>,
+    context: &'a PyConversionContext,
+) -> PyResult<PyContainerGuard<'a>> {
+    let type_name = obj
+        .get_type()
+        .getattr("__name__")
+        .and_then(|name| name.extract::<String>())
+        .unwrap_or_else(|_| "object".to_string());
+    if context.depth.get() >= MAX_PY_CONVERSION_DEPTH {
+        return Err(StarlarkError::new_err(format!(
+            "Maximum depth of {} exceeded while converting Python value \
+             of type `{}` to Starlark value",
+            MAX_PY_CONVERSION_DEPTH, type_name
+        )));
+    }
+    let key = obj.as_ptr() as usize;
+    if !context.active.borrow_mut().insert(key) {
+        return Err(StarlarkError::new_err(format!(
+            "Cycle detected while converting Python value of type `{}` \
+             to Starlark value",
+            type_name
+        )));
+    }
+    context.depth.set(context.depth.get() + 1);
+    Ok(PyContainerGuard { context, key })
+}
+
 // Converts Python objects to Starlark values.
 //
 // Mirrors value_to_pyobject's approach: handle custom types and nested structures
 // directly, falling back to JSON for primitives. This enables custom types like
 // RustDecimal to work correctly in nested structures.
-fn pyobject_to_value<'v>(obj: Bound<PyAny>, heap: &'v Heap) -> PyResult<Value<'v>> {
+//
+// *context* carries the cycle and depth guards; see :struct:`PyConversionContext`.
+fn pyobject_to_value<'v>(
+    obj: Bound<PyAny>,
+    heap: &'v Heap,
+    context: &PyConversionContext,
+) -> PyResult<Value<'v>> {
     if let Some(value) = python_to_decimal(&obj, heap)? {
         return Ok(value);
     }
 
     if let Ok(dict) = obj.downcast::<PyDict>() {
+        let _guard = enter_py_container(&obj, context)?;
         let mut mp = SmallMap::with_capacity(dict.len());
         for (key, value) in dict.iter() {
             // Starlark dicts require string keys
             let key_str: String = key.extract()?;
             let hashed_key = heap.alloc_str(&key_str).get_hashed_value();
-            let converted = pyobject_to_value(value, heap)?;
+            let converted = pyobject_to_value(value, heap, context)?;
             mp.insert_hashed(hashed_key, converted);
         }
         return Ok(heap.alloc(Dict::new(mp)));
     }
 
     if let Ok(list) = obj.downcast::<PyList>() {
+        let _guard = enter_py_container(&obj, context)?;
         let elements = list
             .iter()
-            .map(|item| pyobject_to_value(item, heap))
+            .map(|item| pyobject_to_value(item, heap, context))
             .collect::<PyResult<Vec<Value<'v>>>>()?;
         return Ok(heap.alloc(AllocList(elements)));
     }
 
     if let Ok(tuple) = obj.downcast::<PyTuple>() {
+        let _guard = enter_py_container(&obj, context)?;
         // Convert Python tuples to Starlark lists for backwards compatibility.
         // Both Python tuples and lists become Starlark lists, and Starlark tuples
         // also convert to Python lists (matching the old JSON path behavior).
         let elements = tuple
             .iter()
-            .map(|item| pyobject_to_value(item, heap))
+            .map(|item| pyobject_to_value(item, heap, context))
             .collect::<PyResult<Vec<Value<'v>>>>()?;
         return Ok(heap.alloc(AllocList(elements)));
     }
@@ -1070,10 +1148,12 @@ impl<'v> StarlarkValue<'v> for PythonCallableValue {
                 convert_to_starlark_err(py_kwargs.set_item(key, val))?;
             }
 
+            let py_context = PyConversionContext::new();
             convert_to_starlark_err(pyobject_to_value(
                 convert_to_starlark_err(self.callable.call(py, py_args_tuple, Some(&py_kwargs)))?
                     .into_bound(py),
                 eval.heap(),
+                &py_context,
             ))
         })
     }
@@ -1120,7 +1200,8 @@ impl Module {
     fn __setitem__(slf: &Bound<Self>, name: &str, obj: Bound<PyAny>) -> PyResult<()> {
         let self_ref = slf.borrow();
         let self_locked = self_ref.0.lock().unwrap();
-        self_locked.set(name, pyobject_to_value(obj, self_locked.heap())?);
+        let context = PyConversionContext::new();
+        self_locked.set(name, pyobject_to_value(obj, self_locked.heap(), &context)?);
         Ok(())
     }
 
@@ -1365,14 +1446,20 @@ fn frozen_module_call(
 
     let function = convert_anyhow_err(slf.get().0.get(name))?;
     let module = starlark::environment::Module::new();
+    let context = PyConversionContext::new();
     let sl_args = args
         .iter()
-        .map(|item| pyobject_to_value(item, module.heap()))
+        .map(|item| pyobject_to_value(item, module.heap(), &context))
         .collect::<PyResult<Vec<Value<'_>>>>()?;
     let sl_kwargs = match kwargs {
         Some(kwarg_seq) => kwarg_seq
             .iter()
-            .map(|(k, v)| Ok((k.extract::<String>()?, pyobject_to_value(v, module.heap())?)))
+            .map(|(k, v)| {
+                Ok((
+                    k.extract::<String>()?,
+                    pyobject_to_value(v, module.heap(), &context)?,
+                ))
+            })
             .collect::<PyResult<Vec<(String, Value<'_>)>>>()?,
         None => Vec::new(),
     };
