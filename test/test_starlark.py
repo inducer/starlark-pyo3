@@ -474,6 +474,107 @@ def test_frozen_module_call_with_returns_eval_result():
 # }}}
 
 
+# {{{ cyclic values
+
+def _eval_module(content, glb=None):
+    if glb is None:
+        glb = sl.Globals.standard()
+    mod = sl.Module()
+    dialect = sl.Dialect.standard()
+    dialect.enable_top_level_stmt = True
+    ast = sl.parse("cycle.star", content, dialect)
+    sl.eval(mod, ast, glb)
+    return mod
+
+
+def test_cyclic_list_raises_instead_of_crashing():
+    # A cyclic list used to overflow the C stack and crash the interpreter
+    # (SIGSEGV) when read back from the module.
+    mod = _eval_module("l = []\nl.append(l)\nresult = l\n")
+    with pytest.raises(sl.StarlarkError, match="Cycle detected"):
+        _ = mod["result"]
+
+
+def test_cyclic_dict_raises():
+    mod = _eval_module("d = {}\nd['self'] = d\nresult = d\n")
+    with pytest.raises(sl.StarlarkError, match="Cycle detected"):
+        _ = mod["result"]
+
+
+def test_mutual_list_dict_cycle_raises():
+    mod = _eval_module("l = []\nd = {}\nl.append(d)\nd['l'] = l\nresult = l\n")
+    with pytest.raises(sl.StarlarkError, match="Cycle detected"):
+        _ = mod["result"]
+
+
+def test_cycle_through_tuple_raises():
+    # A tuple itself cannot contain itself (it is immutable), but a list
+    # and a tuple can form a cycle between them.
+    mod = _eval_module("l = []\nt = (l,)\nl.append(t)\nresult = l\n")
+    with pytest.raises(sl.StarlarkError, match="Cycle detected"):
+        _ = mod["result"]
+
+
+def test_cyclic_list_as_eval_result_raises():
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+    dialect = sl.Dialect.standard()
+    dialect.enable_top_level_stmt = True
+    ast = sl.parse("cycle-eval.star", "l = []\nl.append(l)\nl\n", dialect)
+    with pytest.raises(sl.StarlarkError, match="Cycle detected"):
+        sl.eval(mod, ast, glb)
+
+
+CYCLIC_FN_STAR = """
+def get_cycle():
+    l = []
+    l.append(l)
+    return l
+"""
+
+
+def test_cyclic_list_via_frozen_call_raises():
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+    sl.eval(mod, sl.parse("cycle-fn.star", CYCLIC_FN_STAR), glb)
+    fmod = mod.freeze()
+    with pytest.raises(sl.StarlarkError, match="Cycle detected"):
+        fmod.call("get_cycle")
+
+
+def test_cyclic_list_into_python_callable_raises():
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+    mod.add_callable("consume", lambda x: 0)
+    ast = sl.parse("cycle-arg.star", "l = []\nl.append(l)\nconsume(l)\n")
+    with pytest.raises(sl.StarlarkError, match="Cycle detected"):
+        sl.eval(mod, ast, glb)
+
+
+def test_deep_non_cyclic_nesting_within_limit_succeeds():
+    mod = _eval_module("result = [1]\nfor i in range(500):\n    result = [result]\n")
+    r = mod["result"]
+    for _ in range(500):
+        assert isinstance(r, list) and len(r) == 1
+        r = r[0]
+    assert r == [1]
+
+
+def test_deep_non_cyclic_nesting_beyond_limit_raises():
+    mod = _eval_module("result = [1]\nfor i in range(1500):\n    result = [result]\n")
+    with pytest.raises(sl.StarlarkError, match="Maximum depth"):
+        _ = mod["result"]
+
+
+def test_shared_reference_is_not_a_false_cycle():
+    # Referencing the same value twice is a DAG, not a cycle, and must
+    # convert normally.
+    mod = _eval_module("x = [1, 2]\nresult = [x, x]\n")
+    assert mod["result"] == [[1, 2], [1, 2]]
+
+# }}}
+
+
 if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1:
