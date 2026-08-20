@@ -572,6 +572,74 @@ def test_shared_reference_is_not_a_false_cycle():
     mod = _eval_module("x = [1, 2]\nresult = [x, x]\n")
     assert mod["result"] == [[1, 2], [1, 2]]
 
+
+def test_cyclic_python_list_raises_instead_of_crashing():
+    # Cyclic Python objects used to overflow the native stack and crash the
+    # interpreter (SIGSEGV) when converted into the module.
+    mod = sl.Module()
+    lst = []
+    lst.append(lst)
+    with pytest.raises(sl.StarlarkError, match="Cycle detected"):
+        mod["x"] = lst
+
+
+def test_cyclic_python_dict_raises():
+    mod = sl.Module()
+    d = {}
+    d["self"] = d
+    with pytest.raises(sl.StarlarkError, match="Cycle detected"):
+        mod["x"] = d
+
+
+def test_cyclic_python_list_via_frozen_call_raises():
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+    sl.eval(mod, sl.parse("cycle-arg.star", "def identity(x): return x"), glb)
+    fmod = mod.freeze()
+    lst = []
+    lst.append(lst)
+    with pytest.raises(sl.StarlarkError, match="Cycle detected"):
+        fmod.call("identity", lst)
+    with pytest.raises(sl.StarlarkError, match="Cycle detected"):
+        fmod.call("identity", a=lst)
+
+
+def test_cyclic_python_result_from_callable_raises():
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+
+    def make_cycle():
+        lst = []
+        lst.append(lst)
+        return lst
+
+    mod.add_callable("make_cycle", make_cycle)
+    ast = sl.parse("cycle-ret.star", "make_cycle()")
+    with pytest.raises(sl.StarlarkError, match="Cycle detected"):
+        sl.eval(mod, ast, glb)
+
+
+def test_deep_python_nesting_within_limit_succeeds():
+    mod = sl.Module()
+    lst = [1]
+    for _ in range(500):
+        lst = [lst]
+    mod["x"] = lst
+    r = mod["x"]
+    for _ in range(500):
+        r = r[0]
+    # One wrap remains: the original [1] list.
+    assert r == [1]
+
+
+def test_deep_python_nesting_beyond_limit_raises():
+    mod = sl.Module()
+    lst = [1]
+    for _ in range(1500):
+        lst = [lst]
+    with pytest.raises(sl.StarlarkError, match="Maximum depth"):
+        mod["x"] = lst
+
 # }}}
 
 
