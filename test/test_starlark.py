@@ -279,7 +279,7 @@ def test_check_cancelled_aborts_evaluation():
     assert counter["n"] >= 1
 
 
-def test_check_cancelled_never_triggers_for_quick_eval():
+def test_check_cancelled_noop_for_quick_eval():
     glb = sl.Globals.standard()
     mod = sl.Module()
     ast = sl.parse("quick.star", "1 + 2")
@@ -292,7 +292,10 @@ def test_check_cancelled_never_triggers_for_quick_eval():
 
     result = sl.eval_with(sl.EvalOptions(check_cancelled=cancel), mod, ast, glb)
     assert result.value == 3
-    assert counter["n"] == 0
+    # starlark-rust 0.14 runs the check once at the end of every module
+    # evaluation, so the callback is invoked exactly once even for a quick
+    # eval; a falsy result must not affect the outcome.
+    assert counter["n"] == 1
 
 
 def test_check_cancelled_aborts_on_truthy_int():
