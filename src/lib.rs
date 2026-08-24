@@ -82,7 +82,7 @@ enum JsonError {
     UnrepresentableNumber(String),
 }
 
-fn serde_to_starlark(x: serde_json::Value, heap: &Heap) -> anyhow::Result<Value<'_>> {
+fn serde_to_starlark<'v>(x: serde_json::Value, heap: Heap<'v>) -> anyhow::Result<Value<'v>> {
     match x {
         serde_json::Value::Null => Ok(Value::new_none()),
         serde_json::Value::Bool(x) => Ok(Value::new_bool(x)),
@@ -367,7 +367,7 @@ fn enter_py_container<'a>(
 // *context* carries the cycle and depth guards; see :struct:`PyConversionContext`.
 fn pyobject_to_value<'v>(
     obj: Bound<PyAny>,
-    heap: &'v Heap,
+    heap: Heap<'v>,
     context: &PyConversionContext,
 ) -> PyResult<Value<'v>> {
     if let Some(value) = python_to_decimal(&obj, heap)? {
@@ -1163,62 +1163,141 @@ impl<'v> StarlarkValue<'v> for PythonCallableValue {
 
 // {{{ Module
 
+/// In starlark-rust 0.14, an unfrozen `Module` borrows its heap and may
+/// only be created via `Module::with_temp_heap`, where it must not outlive
+/// the closure. Since the Python-visible module has to persist across calls,
+/// we store its state as a `FrozenModule` (owned and long-lived), and
+/// materialize a temporary starlark `Module` from that state whenever values
+/// need to be set or evaluated.
+///
+/// Note that this also means Module is Send+Sync without unsafe impls now
+/// that it only holds a FrozenModule; check for that on every update to
+/// starlark.
+///
 /// .. automethod:: __getitem__
 /// .. automethod:: __setitem__
 /// .. automethod:: add_callable
 /// .. automethod:: freeze
 #[pyclass]
-struct Module(Mutex<starlark::environment::Module>);
+struct Module(Mutex<Option<starlark::environment::FrozenModule>>);
 
-// Rust infers that Module is not Send because Module contains 'extra_value',
-// which is a Value, and this change prevents Values from ever being Send:
-// https://github.com/facebook/starlark-rust/commit/6af7319980c5f4227b5642a49c4c520e96b5c06a
-// In our case, extra_value isn't used, so here we go pretending to know better.
-// It will probably be useful to disable this on every update to starlark to
-// see if there are other reasons for Module to not be Send.
-unsafe impl Send for Module {}
-unsafe impl Sync for Module {}
+/// Copy all public symbols from a previous frozen state into a fresh module.
+/// `access_owned_frozen_value` also registers the previous frozen heap as a
+/// dependency, so freezing the new module keeps the old heap alive.
+fn import_module_state<'v>(
+    module: &starlark::environment::Module<'v>,
+    state: Option<&starlark::environment::FrozenModule>,
+) {
+    if let Some(state) = state {
+        for name in state.names() {
+            if let Ok(ofv) = state.get(name.as_str()) {
+                let value = module.heap().access_owned_frozen_value(&ofv);
+                module.set(name.as_str(), thaw_value(value, module.heap()));
+            }
+        }
+    }
+}
+
+/// Re-allocate a value from a previous frozen state on the module's heap.
+/// Dicts and lists are the only mutable value types in Starlark, so they
+/// (and any nested dicts and lists) are copied; everything else is
+/// immutable and is reused as-is. Without this, values set before an eval
+/// call would be frozen, and the module could not mutate them.
+fn thaw_value<'v>(value: Value<'v>, heap: Heap<'v>) -> Value<'v> {
+    if let Some(dict) = DictRef::from_value(value) {
+        let mut mp = SmallMap::with_capacity(dict.len());
+        // Dict keys are always immutable (str/int/float/bool), so thawing
+        // them is the identity and the precomputed hashes remain valid.
+        for (k, v) in dict.iter_hashed() {
+            mp.insert_hashed(k, thaw_value(v, heap));
+        }
+        return heap.alloc(Dict::new(mp));
+    }
+    if let Some(list) = ListRef::from_value(value) {
+        let elements: Vec<Value<'v>> = list.iter().map(|item| thaw_value(item, heap)).collect();
+        return heap.alloc(AllocList(elements));
+    }
+    value
+}
+
+impl Module {
+    /// Rebuild the module state from the previous frozen state plus one new
+    /// value. The previous state is restored if the rebuild fails.
+    fn with_new_value(slf: &Bound<Self>, name: &str, value: impl FnOnce(Heap) -> PyResult<Value>) -> PyResult<()> {
+        let py = slf.py();
+        let old_state = slf.borrow().0.lock_py_attached(py).unwrap().take();
+        let new_state = starlark::environment::Module::with_temp_heap(
+            |m| -> PyResult<starlark::environment::FrozenModule> {
+                import_module_state(&m, old_state.as_ref());
+                m.set(name, value(m.heap())?);
+                Ok(convert_freeze_err(m.freeze())?)
+            },
+        );
+        match new_state {
+            Ok(fmod) => {
+                *slf.borrow().0.lock_py_attached(py).unwrap() = Some(fmod);
+                Ok(())
+            }
+            Err(e) => {
+                *slf.borrow().0.lock_py_attached(py).unwrap() = old_state;
+                Err(e)
+            }
+        }
+    }
+}
 
 #[pymethods]
 impl Module {
     #[new]
     #[pyo3(text_signature = "() -> None")]
     fn py_new() -> PyResult<Module> {
-        Ok(Module(Mutex::new(starlark::environment::Module::new())))
+        Ok(Module(Mutex::new(None)))
     }
 
     fn __getitem__(slf: &Bound<Self>, name: &str) -> PyResult<Py<PyAny>> {
-        Python::attach(|py| match slf.borrow().0.lock().unwrap().get(name) {
-            Some(val) => {
-                let context = ConversionContext::new();
-                Ok(value_to_pyobject(val, &context)?)
-            }
+        let py = slf.py();
+        let slf_ref = slf.borrow();
+        let state = slf_ref.0.lock_py_attached(py).unwrap();
+        match state.as_ref() {
+            Some(fmod) => match fmod.get(name) {
+                Ok(ofv) => {
+                    let context = ConversionContext::new();
+                    value_to_pyobject(ofv.value(), &context)
+                }
+                // Not defined (or private), matching the behavior of the
+                // old unfrozen `Module::get`.
+                Err(_) => Ok(py.None()),
+            },
             None => Ok(py.None()),
-        })
+        }
     }
 
     fn __setitem__(slf: &Bound<Self>, name: &str, obj: Bound<PyAny>) -> PyResult<()> {
-        let self_ref = slf.borrow();
-        let self_locked = self_ref.0.lock().unwrap();
-        let context = PyConversionContext::new();
-        self_locked.set(name, pyobject_to_value(obj, self_locked.heap(), &context)?);
-        Ok(())
+        Module::with_new_value(slf, name, |heap| {
+            let context = PyConversionContext::new();
+            pyobject_to_value(obj, heap, &context)
+        })
     }
 
     #[pyo3(text_signature = "(name: str, callable: Callable) -> None")]
-    fn add_callable(slf: &Bound<Self>, name: &str, callable: Py<PyAny>) {
-        let self_ref = slf.borrow();
-        let self_locked = self_ref.0.lock().unwrap();
-        let b = self_locked.heap().alloc(PythonCallableValue { callable });
-        self_locked.set(name, b);
+    fn add_callable(slf: &Bound<Self>, name: &str, callable: Py<PyAny>) -> PyResult<()> {
+        Module::with_new_value(slf, name, |heap| {
+            Ok(heap.alloc(PythonCallableValue { callable }))
+        })
     }
 
     #[pyo3(text_signature = "() -> FrozenModule")]
     fn freeze(slf: &Bound<Self>) -> PyResult<FrozenModule> {
-        let self_ref = slf.borrow_mut();
-        let mut self_locked = self_ref.0.lock().unwrap();
-        let module = std::mem::replace(&mut *self_locked, starlark::environment::Module::new());
-        Ok(FrozenModule(convert_freeze_err(module.freeze())?))
+        let py = slf.py();
+        // As before, freezing consumes the module state.
+        let old_state = slf.borrow().0.lock_py_attached(py).unwrap().take();
+        let fmod = match old_state {
+            Some(fmod) => fmod.dupe(),
+            None => convert_freeze_err(starlark::environment::Module::with_temp_heap(
+                |m| m.freeze(),
+            ))?,
+        };
+        Ok(FrozenModule(fmod))
     }
 }
 
@@ -1234,12 +1313,13 @@ impl Module {
 /// .. autoattribute:: check_cancelled
 ///
 ///     Optional zero-argument callable invoked periodically during
-///     evaluation (roughly every 1000 bytecode instructions). A truthy
-///     return aborts evaluation with :class:`StarlarkError`; a raised
-///     Python exception propagates to the caller. The callback must
-///     not access the *module* passed to :func:`eval_with`: the module
-///     is locked during evaluation and re-entry will deadlock.
-///     Cancellation is scoped to a single :func:`eval_with` /
+///     evaluation (roughly every 1000 bytecode instructions) and once
+///     at the end of the module. A truthy return aborts evaluation
+///     with :class:`StarlarkError`; a raised Python exception
+///     propagates to the caller. The callback must not call :func:`eval`
+///     on *module*: the module is exclusively borrowed for the duration
+///     of the evaluation, so re-entry is not possible. Cancellation is
+///     scoped to a single :func:`eval_with` /
 ///     :meth:`FrozenModule.call_with` call; nested :func:`eval_with`
 ///     calls (e.g. from a :class:`FileLoader`) need their own callback.
 /// .. autoattribute:: max_callstack_size
@@ -1444,47 +1524,49 @@ fn frozen_module_call(
         .and_then(|o| o.check_cancelled.as_ref())
         .map(|cb| CancelledState::new(cb.clone_ref(slf.py())));
 
-    let function = convert_anyhow_err(slf.get().0.get(name))?;
-    let module = starlark::environment::Module::new();
-    let context = PyConversionContext::new();
-    let sl_args = args
-        .iter()
-        .map(|item| pyobject_to_value(item, module.heap(), &context))
-        .collect::<PyResult<Vec<Value<'_>>>>()?;
-    let sl_kwargs = match kwargs {
-        Some(kwarg_seq) => kwarg_seq
+    let frozen = slf.get().0.dupe();
+    let function_ofv = convert_anyhow_err(frozen.get(name))?;
+    let result = starlark::environment::Module::with_temp_heap(|module| {
+        let function = module.heap().access_owned_frozen_value(&function_ofv);
+        let context = PyConversionContext::new();
+        let sl_args = args
             .iter()
-            .map(|(k, v)| {
-                Ok((
-                    k.extract::<String>()?,
-                    pyobject_to_value(v, module.heap(), &context)?,
-                ))
-            })
-            .collect::<PyResult<Vec<(String, Value<'_>)>>>()?,
-        None => Vec::new(),
-    };
-    let mut evaluator = starlark::eval::Evaluator::new(&module);
-    apply_eval_opts(&mut evaluator, options, cancel_state.as_ref())?;
-    let result = convert_starlark_err(
-        evaluator.eval_function(
-            function.value(),
+            .map(|item| pyobject_to_value(item, module.heap(), &context))
+            .collect::<PyResult<Vec<Value<'_>>>>()?;
+        let sl_kwargs = match kwargs {
+            Some(kwarg_seq) => kwarg_seq
+                .iter()
+                .map(|(k, v)| {
+                    Ok((
+                        k.extract::<String>()?,
+                        pyobject_to_value(v, module.heap(), &context)?,
+                    ))
+                })
+                .collect::<PyResult<Vec<(String, Value<'_>)>>>()?,
+            None => Vec::new(),
+        };
+        let mut evaluator = starlark::eval::Evaluator::new(&module);
+        apply_eval_opts(&mut evaluator, options, cancel_state.as_ref())?;
+        let result = convert_starlark_err(evaluator.eval_function(
+            function,
             &sl_args,
             &sl_kwargs
                 .iter()
                 .map(|(k, v)| (k.as_str(), v.dupe()))
                 .collect::<Vec<(&str, Value<'_>)>>(),
-        ),
-    )
-    .and_then(|val| {
-        let context = ConversionContext::new();
-        value_to_pyobject(val, &context)
-    });
+        ))
+        .and_then(|val| {
+            let context = ConversionContext::new();
+            value_to_pyobject(val, &context)
+        });
 
-    if let Some(state) = cancel_state.as_ref() {
-        if let Some(err) = state.take_error() {
-            return Err(err);
+        if let Some(state) = cancel_state.as_ref() {
+            if let Some(err) = state.take_error() {
+                return Err(err);
+            }
         }
-    }
+        result
+    });
     result
 }
 
@@ -1499,37 +1581,60 @@ fn eval_impl(
         .and_then(|o| o.check_cancelled.as_ref())
         .map(|cb| CancelledState::new(cb.clone_ref(ast.py())));
 
-    let tail = |evaluator: &mut starlark::eval::Evaluator| {
-        // Stupid: eval_module consumes the AST. Clone it.
-        let context = ConversionContext::new();
-        value_to_pyobject(
-            convert_starlark_err(evaluator.eval_module(ast.borrow().0.clone(), &globals.0))?,
-            &context,
-        )
-    };
+    // Materialize a temporary starlark module from the current state, evaluate
+    // against it, and freeze the result back into the module. On error, the
+    // previous state is restored.
+    let old_state = module.0.lock_py_attached(ast.py()).unwrap().take();
+    let result = starlark::environment::Module::with_temp_heap(
+        |m| -> PyResult<(Py<PyAny>, starlark::environment::FrozenModule)> {
+            import_module_state(&m, old_state.as_ref());
 
-    let mod_locked = module.0.lock_py_attached(ast.py()).unwrap();
-    let result = match file_loader {
-        Some(loader_cell) => {
-            let loader_ref = loader_cell.borrow();
-            let mut evaluator = starlark::eval::Evaluator::new(&mod_locked);
-            evaluator.set_loader(&*loader_ref);
-            apply_eval_opts(&mut evaluator, options, cancel_state.as_ref())?;
-            tail(&mut evaluator)
-        }
-        None => {
-            let mut evaluator = starlark::eval::Evaluator::new(&mod_locked);
-            apply_eval_opts(&mut evaluator, options, cancel_state.as_ref())?;
-            tail(&mut evaluator)
-        }
-    };
+            // Stupid: eval_module consumes the AST. Clone it.
+            let ast_ = ast.borrow().0.clone();
 
-    if let Some(state) = cancel_state.as_ref() {
-        if let Some(err) = state.take_error() {
-            return Err(err);
+            // Kept alive until after the evaluator, which holds a reference to it.
+            let loader_ref = file_loader.map(|loader_cell| loader_cell.borrow());
+            let mut evaluator = starlark::eval::Evaluator::new(&m);
+            if let Some(ref loader_ref) = loader_ref {
+                evaluator.set_loader(&**loader_ref);
+            }
+            apply_eval_opts(&mut evaluator, options, cancel_state.as_ref())?;
+
+            let eval_result = evaluator.eval_module(ast_, &globals.0);
+            // The evaluator borrows `m`; drop it before `m.freeze()` moves it.
+            drop(evaluator);
+            let value = convert_starlark_err(eval_result)?;
+            let context = ConversionContext::new();
+            let value = value_to_pyobject(value, &context)?;
+            let new_state = convert_freeze_err(m.freeze())?;
+            Ok((value, new_state))
+        },
+    );
+
+    match result {
+        Ok((value, new_state)) => {
+            *module.0.lock_py_attached(ast.py()).unwrap() = Some(new_state);
+            if let Some(state) = cancel_state.as_ref() {
+                if let Some(err) = state.take_error() {
+                    return Err(err);
+                }
+            }
+            Ok(value)
+        }
+        Err(e) => {
+            *module.0.lock_py_attached(ast.py()).unwrap() = old_state;
+            // A check_cancelled callback that raises a Python exception is
+            // reported by stashing the exception and treating the call as a
+            // cancel; re-raise the stashed exception in preference to the
+            // generic "Evaluation cancelled" error.
+            if let Some(state) = cancel_state.as_ref() {
+                if let Some(err) = state.take_error() {
+                    return Err(err);
+                }
+            }
+            Err(e)
         }
     }
-    result
 }
 
 /// :returns: the value returned by the evaluation, after :ref:`object-conversion`.

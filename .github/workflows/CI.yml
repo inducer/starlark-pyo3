@@ -35,7 +35,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [aarch64, armv7]
+        target: [
+          aarch64, 
+          # https://github.com/facebook/starlark-rust/issues/233
+          # armv7
+        ]
     steps:
     - uses: actions/checkout@v4
     - uses: PyO3/maturin-action@v1
@@ -258,4 +262,3 @@ jobs:
           run: |
               pip install basedpyright typing_extensions
               basedpyright
-

@@ -32,7 +32,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rust_decimal::Decimal;
 use starlark::collections::StarlarkHasher;
-use starlark::environment::{GlobalsBuilder, Methods, MethodsBuilder, MethodsStatic};
+use starlark::environment::{GlobalsBuilder, Methods, MethodsBuilder};
 use starlark::starlark_simple_value;
 use starlark::values::{
     Heap, NoSerialize, ProvidesStaticType, StarlarkValue, Value, ValueError, ValueLike,
@@ -107,14 +107,14 @@ fn decimal_from_constructor<'v>(value: Value<'v>) -> starlark::Result<Decimal> {
     try_decimal_from_value(value, decimal_constructor_error)
 }
 
-pub fn alloc_decimal<'v>(heap: &'v Heap, decimal: Decimal) -> Value<'v> {
+pub fn alloc_decimal<'v>(heap: Heap<'v>, decimal: Decimal) -> Value<'v> {
     heap.alloc(DecimalValue { value: decimal })
 }
 
 #[starlark_module]
 pub fn decimal_module(builder: &mut GlobalsBuilder) {
     /// Construct a rust_decimal value from a string, int, or existing RustDecimal.
-    fn RustDecimal<'v>(#[starlark(require = pos)] value: Value<'v>, heap: &'v Heap) -> starlark::Result<Value<'v>> {
+    fn RustDecimal<'v>(#[starlark(require = pos)] value: Value<'v>, heap: Heap<'v>) -> starlark::Result<Value<'v>> {
         let decimal = decimal_from_constructor(value)?;
         Ok(alloc_decimal(heap, decimal))
     }
@@ -138,44 +138,44 @@ impl<'v> StarlarkValue<'v> for DecimalValue {
         !self.value.is_zero()
     }
 
-    fn plus(&self, heap: &'v Heap) -> starlark::Result<Value<'v>> {
+    fn plus(&self, heap: Heap<'v>) -> starlark::Result<Value<'v>> {
         Ok(alloc_decimal(heap, self.value))
     }
 
-    fn minus(&self, heap: &'v Heap) -> starlark::Result<Value<'v>> {
+    fn minus(&self, heap: Heap<'v>) -> starlark::Result<Value<'v>> {
         Ok(alloc_decimal(heap, -self.value))
     }
 
-    fn add(&self, rhs: Value<'v>, heap: &'v Heap) -> Option<starlark::Result<Value<'v>>> {
+    fn add(&self, rhs: Value<'v>, heap: Heap<'v>) -> Option<starlark::Result<Value<'v>>> {
         Some(decimal_from_value(rhs, "+").map(|rhs| {
             alloc_decimal(heap, self.value + rhs)
         }))
     }
 
-    fn radd(&self, lhs: Value<'v>, heap: &'v Heap) -> Option<starlark::Result<Value<'v>>> {
+    fn radd(&self, lhs: Value<'v>, heap: Heap<'v>) -> Option<starlark::Result<Value<'v>>> {
         Some(decimal_from_value(lhs, "+").map(|lhs| {
             alloc_decimal(heap, lhs + self.value)
         }))
     }
 
-    fn sub(&self, rhs: Value<'v>, heap: &'v Heap) -> starlark::Result<Value<'v>> {
+    fn sub(&self, rhs: Value<'v>, heap: Heap<'v>) -> starlark::Result<Value<'v>> {
         let rhs = decimal_from_value(rhs, "-")?;
         Ok(alloc_decimal(heap, self.value - rhs))
     }
 
-    fn mul(&self, rhs: Value<'v>, heap: &'v Heap) -> Option<starlark::Result<Value<'v>>> {
+    fn mul(&self, rhs: Value<'v>, heap: Heap<'v>) -> Option<starlark::Result<Value<'v>>> {
         Some(decimal_from_value(rhs, "*").map(|rhs| {
             alloc_decimal(heap, self.value * rhs)
         }))
     }
 
-    fn rmul(&self, lhs: Value<'v>, heap: &'v Heap) -> Option<starlark::Result<Value<'v>>> {
+    fn rmul(&self, lhs: Value<'v>, heap: Heap<'v>) -> Option<starlark::Result<Value<'v>>> {
         Some(decimal_from_value(lhs, "*").map(|lhs| {
             alloc_decimal(heap, lhs * self.value)
         }))
     }
 
-    fn div(&self, rhs: Value<'v>, heap: &'v Heap) -> starlark::Result<Value<'v>> {
+    fn div(&self, rhs: Value<'v>, heap: Heap<'v>) -> starlark::Result<Value<'v>> {
         let rhs = decimal_from_value(rhs, "/")?;
         if rhs.is_zero() {
             return Err(ValueError::DivisionByZero.into());
@@ -183,7 +183,7 @@ impl<'v> StarlarkValue<'v> for DecimalValue {
         Ok(alloc_decimal(heap, self.value / rhs))
     }
 
-    fn floor_div(&self, rhs: Value<'v>, heap: &'v Heap) -> starlark::Result<Value<'v>> {
+    fn floor_div(&self, rhs: Value<'v>, heap: Heap<'v>) -> starlark::Result<Value<'v>> {
         let rhs = decimal_from_value(rhs, "//")?;
         if rhs.is_zero() {
             return Err(ValueError::DivisionByZero.into());
@@ -192,7 +192,7 @@ impl<'v> StarlarkValue<'v> for DecimalValue {
         Ok(alloc_decimal(heap, division.floor()))
     }
 
-    fn percent(&self, rhs: Value<'v>, heap: &'v Heap) -> starlark::Result<Value<'v>> {
+    fn percent(&self, rhs: Value<'v>, heap: Heap<'v>) -> starlark::Result<Value<'v>> {
         let rhs = decimal_from_value(rhs, "%")?;
         if rhs.is_zero() {
             return Err(ValueError::DivisionByZero.into());
@@ -206,10 +206,11 @@ impl<'v> StarlarkValue<'v> for DecimalValue {
     }
 
     fn get_methods() -> Option<&'static Methods> {
-        static RES: MethodsStatic = MethodsStatic::new();
-        RES.methods(decimal_methods)
+        Some(DECIMAL_VALUE_METHODS.methods())
     }
 }
+
+starlark::methods_static!(DECIMAL_VALUE_METHODS = decimal_methods);
 
 #[starlark_module]
 fn decimal_methods(builder: &mut MethodsBuilder) {
@@ -223,7 +224,7 @@ fn decimal_methods(builder: &mut MethodsBuilder) {
     fn round_dp<'v>(
         #[starlark(this)] this: Value<'v>,
         #[starlark(require = pos)] decimal_places: i32,
-        heap: &'v Heap,
+        heap: Heap<'v>,
     ) -> starlark::Result<Value<'v>> {
         let decimal = this.downcast_ref::<DecimalValue>().unwrap();
         if decimal_places < 0 {
@@ -251,7 +252,7 @@ pub fn decimal_to_python(decimal_value: &DecimalValue) -> PyResult<Py<PyAny>> {
 /// Try to convert Python object to DecimalValue if it's a Python Decimal
 /// Converts via string representation, preserving the exact value and scale.
 /// Does not consult or modify Python's decimal context.
-pub fn python_to_decimal<'v>(obj: &Bound<PyAny>, heap: &'v Heap) -> PyResult<Option<Value<'v>>> {
+pub fn python_to_decimal<'v>(obj: &Bound<PyAny>, heap: Heap<'v>) -> PyResult<Option<Value<'v>>> {
     if let Ok(class) = obj.getattr("__class__") {
         let module_name = match class.getattr("__module__") {
             Ok(module) => module.extract::<String>().ok(),
