@@ -29,10 +29,11 @@ extern crate thiserror;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Display};
+use std::str::FromStr;
 use std::sync::Mutex;
 
 use crate::pyo3::create_exception;
-use crate::pyo3::exceptions::PyException;
+use crate::pyo3::exceptions::{PyException, PyValueError};
 use crate::pyo3::prelude::*;
 
 use gazebo::prelude::*;
@@ -41,8 +42,9 @@ use crate::starlark::collections::SmallMap;
 use crate::starlark::typing::AstModuleTypecheck;
 use allocative::Allocative;
 use dupe::Dupe;
+use num_bigint::BigInt;
 use pyo3::sync::MutexExt;
-use pyo3::types::{PyDict, PyList, PyTuple};
+use pyo3::types::{PyBool, PyDict, PyInt, PyList, PyTuple};
 use starlark::analysis::AstModuleLint;
 use starlark::environment::GlobalsBuilder;
 use starlark::eval::Arguments;
@@ -96,8 +98,8 @@ fn serde_to_starlark(x: serde_json::Value, heap: &Heap) -> anyhow::Result<Value<
                 Ok(heap.alloc(x))
             } else if let Some(x) = x.as_f64() {
                 Ok(heap.alloc(x))
-            //} else if let Ok(x) = BigInt::from_str(&x.to_string()) {
-            // Ok(StarlarkBigInt::alloc_bigint(x, heap))
+            } else if let Ok(x) = BigInt::from_str(&x.to_string()) {
+                Ok(heap.alloc(x))
             } else {
                 Err(JsonError::UnrepresentableNumber(x.to_string()).into())
             }
@@ -372,6 +374,16 @@ fn pyobject_to_value<'v>(
 ) -> PyResult<Value<'v>> {
     if let Some(value) = python_to_decimal(&obj, heap)? {
         return Ok(value);
+    }
+
+    // serde_json represents integers beyond u64/i64 as f64 unless its
+    // arbitrary-precision feature is enabled. Convert Python integers directly
+    // so all Python integer magnitudes become exact Starlark integers.
+    if obj.is_instance_of::<PyInt>() && !obj.is_instance_of::<PyBool>() {
+        let integer: String = obj.str()?.extract()?;
+        let integer = BigInt::from_str(&integer)
+            .map_err(|err| PyValueError::new_err(format!("invalid Python integer: {err}")))?;
+        return Ok(heap.alloc(integer));
     }
 
     if let Ok(dict) = obj.downcast::<PyDict>() {
