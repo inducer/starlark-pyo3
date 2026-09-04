@@ -129,6 +129,43 @@ def test_call_starlark():
     fmod = mod.freeze()
     assert fmod.call("add", 3, 4, b="b", a="a") == 7
 
+
+def test_python_bigints_preserve_exact_values_across_starlark_boundary():
+    positive = 2**64
+    negative = -(2**63) - 1
+    mod = sl.Module()
+    mod["positive"] = positive
+    mod["negative"] = negative
+    mod["nested"] = [positive, {"negative": negative}]
+
+    # Module assignment, including nested containers, must retain Python's
+    # arbitrary-precision integer values rather than widen them to floats.
+    assert mod["positive"] == positive
+    assert type(mod["positive"]) is int
+    assert mod["negative"] == negative
+    assert type(mod["negative"]) is int
+    assert mod["nested"] == [positive, {"negative": negative}]
+
+    glb = sl.Globals.standard()
+    sl.eval(
+        mod,
+        sl.parse(
+            "bigint.star",
+            "def same_values(a, b):\n    return [a, b, a == b, a < b]\n",
+        ),
+        glb,
+    )
+    fmod = mod.freeze()
+
+    # Positional call arguments use the same conversion path. Values one unit
+    # apart beyond u64 must remain distinct in Starlark.
+    assert fmod.call("same_values", positive + 1, positive) == [
+        positive + 1,
+        positive,
+        False,
+        False,
+    ]
+
 # }}}
 
 
