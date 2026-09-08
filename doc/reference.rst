@@ -49,6 +49,7 @@ Values
 ------
 
 .. autoclass:: OpaquePythonObject
+.. autoclass:: ToRecord
 
 Decimal
 ^^^^^^^
