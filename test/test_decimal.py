@@ -270,6 +270,28 @@ def test_decimal_division_by_zero():
         sl.eval(mod, ast, glb)
 
 
+@pytest.mark.parametrize("program", [
+    "RustDecimal('79228162514264337593543950335') + 1",
+    "1 + RustDecimal('79228162514264337593543950335')",
+    "RustDecimal('-79228162514264337593543950335') - 1",
+    "RustDecimal('79228162514264337593543950335') * 2",
+    "2 * RustDecimal('79228162514264337593543950335')",
+    "RustDecimal('79228162514264337593543950335') / RustDecimal('0.1')",
+    "RustDecimal('79228162514264337593543950335') // RustDecimal('0.1')",
+])
+def test_decimal_overflow_is_starlark_error_and_module_remains_usable(program: str):
+    """Decimal overflow must not panic across PyO3 or poison the module lock."""
+    glb = sl.Globals.extended_by([sl.LibraryExtension.RustDecimal])
+    mod = sl.Module()
+
+    ast = sl.parse("overflow.star", program)
+    with pytest.raises(sl.StarlarkError):
+        sl.eval(mod, ast, glb)
+
+    mod["after"] = 1
+    assert mod["after"] == 1
+
+
 def test_decimal_scale_and_rounding():
     """Test scale() and round_dp() methods for precision control"""
     glb = sl.Globals.extended_by([sl.LibraryExtension.RustDecimal])

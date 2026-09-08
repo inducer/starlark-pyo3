@@ -69,11 +69,12 @@ fn decimal_constructor_error(arg_type: &str) -> starlark::Error {
     .into()
 }
 
+fn decimal_overflow_error() -> starlark::Error {
+    ValueError::IntegerOverflow.into()
+}
+
 // Helper to convert Starlark values to Decimal, with custom error handling
-fn try_decimal_from_value<'v, F>(
-    value: Value<'v>,
-    make_error: F,
-) -> starlark::Result<Decimal>
+fn try_decimal_from_value<'v, F>(value: Value<'v>, make_error: F) -> starlark::Result<Decimal>
 where
     F: Fn(&str) -> starlark::Error,
 {
@@ -114,7 +115,10 @@ pub fn alloc_decimal<'v>(heap: &'v Heap, decimal: Decimal) -> Value<'v> {
 #[starlark_module]
 pub fn decimal_module(builder: &mut GlobalsBuilder) {
     /// Construct a rust_decimal value from a string, int, or existing RustDecimal.
-    fn RustDecimal<'v>(#[starlark(require = pos)] value: Value<'v>, heap: &'v Heap) -> starlark::Result<Value<'v>> {
+    fn RustDecimal<'v>(
+        #[starlark(require = pos)] value: Value<'v>,
+        heap: &'v Heap,
+    ) -> starlark::Result<Value<'v>> {
         let decimal = decimal_from_constructor(value)?;
         Ok(alloc_decimal(heap, decimal))
     }
@@ -147,31 +151,44 @@ impl<'v> StarlarkValue<'v> for DecimalValue {
     }
 
     fn add(&self, rhs: Value<'v>, heap: &'v Heap) -> Option<starlark::Result<Value<'v>>> {
-        Some(decimal_from_value(rhs, "+").map(|rhs| {
-            alloc_decimal(heap, self.value + rhs)
+        Some(decimal_from_value(rhs, "+").and_then(|rhs| {
+            self.value
+                .checked_add(rhs)
+                .map(|value| alloc_decimal(heap, value))
+                .ok_or_else(decimal_overflow_error)
         }))
     }
 
     fn radd(&self, lhs: Value<'v>, heap: &'v Heap) -> Option<starlark::Result<Value<'v>>> {
-        Some(decimal_from_value(lhs, "+").map(|lhs| {
-            alloc_decimal(heap, lhs + self.value)
+        Some(decimal_from_value(lhs, "+").and_then(|lhs| {
+            lhs.checked_add(self.value)
+                .map(|value| alloc_decimal(heap, value))
+                .ok_or_else(decimal_overflow_error)
         }))
     }
 
     fn sub(&self, rhs: Value<'v>, heap: &'v Heap) -> starlark::Result<Value<'v>> {
         let rhs = decimal_from_value(rhs, "-")?;
-        Ok(alloc_decimal(heap, self.value - rhs))
+        self.value
+            .checked_sub(rhs)
+            .map(|value| alloc_decimal(heap, value))
+            .ok_or_else(decimal_overflow_error)
     }
 
     fn mul(&self, rhs: Value<'v>, heap: &'v Heap) -> Option<starlark::Result<Value<'v>>> {
-        Some(decimal_from_value(rhs, "*").map(|rhs| {
-            alloc_decimal(heap, self.value * rhs)
+        Some(decimal_from_value(rhs, "*").and_then(|rhs| {
+            self.value
+                .checked_mul(rhs)
+                .map(|value| alloc_decimal(heap, value))
+                .ok_or_else(decimal_overflow_error)
         }))
     }
 
     fn rmul(&self, lhs: Value<'v>, heap: &'v Heap) -> Option<starlark::Result<Value<'v>>> {
-        Some(decimal_from_value(lhs, "*").map(|lhs| {
-            alloc_decimal(heap, lhs * self.value)
+        Some(decimal_from_value(lhs, "*").and_then(|lhs| {
+            lhs.checked_mul(self.value)
+                .map(|value| alloc_decimal(heap, value))
+                .ok_or_else(decimal_overflow_error)
         }))
     }
 
@@ -180,7 +197,10 @@ impl<'v> StarlarkValue<'v> for DecimalValue {
         if rhs.is_zero() {
             return Err(ValueError::DivisionByZero.into());
         }
-        Ok(alloc_decimal(heap, self.value / rhs))
+        self.value
+            .checked_div(rhs)
+            .map(|value| alloc_decimal(heap, value))
+            .ok_or_else(decimal_overflow_error)
     }
 
     fn floor_div(&self, rhs: Value<'v>, heap: &'v Heap) -> starlark::Result<Value<'v>> {
@@ -188,8 +208,10 @@ impl<'v> StarlarkValue<'v> for DecimalValue {
         if rhs.is_zero() {
             return Err(ValueError::DivisionByZero.into());
         }
-        let division = self.value / rhs;
-        Ok(alloc_decimal(heap, division.floor()))
+        self.value
+            .checked_div(rhs)
+            .map(|value| alloc_decimal(heap, value.floor()))
+            .ok_or_else(decimal_overflow_error)
     }
 
     fn percent(&self, rhs: Value<'v>, heap: &'v Heap) -> starlark::Result<Value<'v>> {
@@ -197,7 +219,10 @@ impl<'v> StarlarkValue<'v> for DecimalValue {
         if rhs.is_zero() {
             return Err(ValueError::DivisionByZero.into());
         }
-        Ok(alloc_decimal(heap, self.value % rhs))
+        self.value
+            .checked_rem(rhs)
+            .map(|value| alloc_decimal(heap, value))
+            .ok_or_else(decimal_overflow_error)
     }
 
     fn write_hash(&self, hasher: &mut StarlarkHasher) -> starlark::Result<()> {
@@ -227,8 +252,9 @@ fn decimal_methods(builder: &mut MethodsBuilder) {
     ) -> starlark::Result<Value<'v>> {
         let decimal = this.downcast_ref::<DecimalValue>().unwrap();
         if decimal_places < 0 {
-            return Err(ValueError::IncorrectParameterTypeNamed("decimal_places".to_owned())
-                .into());
+            return Err(
+                ValueError::IncorrectParameterTypeNamed("decimal_places".to_owned()).into(),
+            );
         }
         let rounded = decimal.value.round_dp(decimal_places as u32);
         Ok(alloc_decimal(heap, rounded))
