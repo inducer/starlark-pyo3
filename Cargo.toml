@@ -29,7 +29,7 @@ allocative = { git = "https://github.com/facebook/starlark-rust", rev = "db3b090
 dupe = { git = "https://github.com/facebook/starlark-rust", rev = "db3b090a19f6134f2a79a727f70d80f68f8f7dc6" }
 
 anyhow = "^1.0.65"
-pyo3 = { version = "0.26", features = ["extension-module"] }
+pyo3 = { version = "0.30", features = ["extension-module"] }
 
 # needed to resolve contradictory constraints in dependencies
 syn = "^1.0.96"
@@ -44,4 +44,3 @@ rust_decimal = "1.33"
 
 [lints.clippy]
 all = "warn"
-

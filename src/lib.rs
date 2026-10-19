@@ -287,7 +287,8 @@ fn value_to_pyobject<'v>(value: Value<'v>, context: &ConversionContext<'v>) -> P
     let json_val = convert_anyhow_err(value.to_json())?;
     Python::attach(|py| {
         let json = py.import("json")?;
-        json.getattr("loads")?.call1((json_val,))?.extract()
+        let loaded = json.getattr("loads")?.call1((json_val,))?;
+        Ok(loaded.unbind())
     })
 }
 
@@ -386,7 +387,7 @@ fn pyobject_to_value<'v>(
         return Ok(heap.alloc(integer));
     }
 
-    if let Ok(dict) = obj.downcast::<PyDict>() {
+    if let Ok(dict) = obj.cast::<PyDict>() {
         let _guard = enter_py_container(&obj, context)?;
         let mut mp = SmallMap::with_capacity(dict.len());
         for (key, value) in dict.iter() {
@@ -399,7 +400,7 @@ fn pyobject_to_value<'v>(
         return Ok(heap.alloc(Dict::new(mp)));
     }
 
-    if let Ok(list) = obj.downcast::<PyList>() {
+    if let Ok(list) = obj.cast::<PyList>() {
         let _guard = enter_py_container(&obj, context)?;
         let elements = list
             .iter()
@@ -408,7 +409,7 @@ fn pyobject_to_value<'v>(
         return Ok(heap.alloc(AllocList(elements)));
     }
 
-    if let Ok(tuple) = obj.downcast::<PyTuple>() {
+    if let Ok(tuple) = obj.cast::<PyTuple>() {
         let _guard = enter_py_container(&obj, context)?;
         // Convert Python tuples to Starlark lists for backwards compatibility.
         // Both Python tuples and lists become Starlark lists, and Starlark tuples
@@ -420,7 +421,7 @@ fn pyobject_to_value<'v>(
         return Ok(heap.alloc(AllocList(elements)));
     }
 
-    if let Ok(opaque) = obj.downcast::<OpaquePythonObject>() {
+    if let Ok(opaque) = obj.cast::<OpaquePythonObject>() {
         return Ok(heap.alloc(StarlarkOpaquePythonObject {
             obj: opaque.borrow().0.clone_ref(obj.py()),
         }));
@@ -561,7 +562,7 @@ impl ResolvedFileSpan {
 /// .. attribute:: Warning
 /// .. attribute:: Advice
 /// .. attribute:: Disabled
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 struct EvalSeverity(starlark::analysis::EvalSeverity);
 
@@ -687,7 +688,7 @@ impl Error {
 /// .. attribute:: DISABLE
 /// .. attribute:: PARSE_ONLY
 /// .. attribute:: ENABLE
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 struct DialectTypes(starlark::syntax::DialectTypes);
 
@@ -751,7 +752,7 @@ impl DialectTypes {
 /// .. note::
 ///
 ///     These attributes are only writable (not readable) for the moment.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 struct Dialect(starlark::syntax::Dialect);
 
@@ -937,7 +938,7 @@ impl AstModule {
 /// .. attribute:: Internal
 /// .. attribute:: CallStack
 /// .. attribute:: RustDecimal
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 struct LibraryExtension {
     kind: LibraryExtensionKind,
@@ -1372,7 +1373,8 @@ impl starlark::eval::FileLoader for FileLoader {
             |py| -> starlark::Result<starlark::environment::FrozenModule> {
                 let fmod: Py<FrozenModule> = convert_to_starlark_err(
                     convert_to_starlark_err(self.callable.call1(py, (path.to_string(),)))?
-                        .extract(py),
+                        .extract(py)
+                        .map_err(PyErr::from),
                 )?;
                 // FIXME: Can this be done without cloning the module?
                 let fmod_clone = fmod.borrow(py).0.clone();
